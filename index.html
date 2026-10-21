@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V6</title>
+<title>随机人员生成器 V6.1</title>
 <link rel="icon" href="data:,">
 <style>
 /* ==========================================================
@@ -650,7 +650,7 @@ body.jiale-bg {
   overflow-x: hidden;
   overflow-y: auto;
   max-height: 92vh;
-  width: min(430px, 90vw);
+  width: min(420px, 92vw);
   padding: 24px 28px 26px;
   opacity: 0;
   transform: translateY(10px) scale(.975);
@@ -914,11 +914,69 @@ body.jiale-bg {
   display: flex;
   flex-direction: column;
   padding: 24px 28px 26px;
-  transform: translateX(100%);
-  transition: transform .3s var(--spring-soft);
+  transform: translateX(64px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .42s cubic-bezier(.22, .9, .3, 1), opacity .32s ease;
 }
 
-.subpage.open { transform: translateX(0); }
+.subpage.open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 二级界面：三个分区入口做成圆角卡片，紧凑铺满面板 */
+.group-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .55);
+  border: 1px solid rgba(255, 255, 255, .65);
+  box-shadow: 0 1px 2px rgba(25, 35, 55, .04), inset 0 1px 0 rgba(255, 255, 255, .55);
+  cursor: pointer;
+  isolation: isolate;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform .2s var(--spring-soft), background .3s ease, box-shadow .25s ease;
+}
+.group-card:hover { background: rgba(255, 255, 255, .72); }
+.group-card:active { transform: scale(.985); }
+html[data-theme="dark"] .group-card {
+  background: rgba(255, 255, 255, .07);
+  border-color: rgba(255, 255, 255, .10);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(255, 255, 255, .10);
+}
+html[data-theme="dark"] .group-card:hover { background: rgba(255, 255, 255, .11); }
+.gc-ico {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: linear-gradient(160deg, rgba(110, 190, 255, .22), rgba(110, 190, 255, .07));
+  font-size: 22px;
+  line-height: 1;
+}
+html[data-theme="dark"] .gc-ico { background: rgba(255, 255, 255, .08); }
+.gc-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.gc-title { font-size: 15px; font-weight: 700; letter-spacing: .04em; color: var(--ink-strong, #1c2030); }
+.gc-sub { font-size: 12px; color: var(--ink-3, #8a93a5); }
+html[data-theme="dark"] .gc-title { color: #fff; }
+.group-card .link-arrow { font-size: 18px; }
+
+/* 三级界面分区页：内容区独立滚动，超高时不影响面板头部 */
+#probGroupPage .settings-list,
+#beautyGroupPage .settings-list,
+#otherGroupPage .settings-list {
+  flex: 1;
+  overflow-y: auto;
+}
 
 .sub-header {
   display: flex;
@@ -1413,41 +1471,7 @@ body.jiale-bg {
               inset 0 1px 2px rgba(25, 35, 55, .04);
 }
 
-/* ---------- 美化设置弹窗（Modal） ---------- */
-#beautifyOverlay {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 110;
-}
-
-#beautifyDialog {
-  width: min(300px, 84vw);
-  display: flex;
-  flex-direction: column;
-  padding: 22px 24px 20px;
-  opacity: 0;
-  transform: translateY(6px) scale(.97);
-  filter: blur(6px);
-  box-shadow: 0 1px 1px rgba(25, 35, 55, .02),
-              0 4px 14px rgba(25, 35, 55, .04),
-              inset 0 1px 0 rgba(255, 255, 255, .5);
-  transition:
-    opacity .2s var(--ease-out),
-    transform .24s var(--spring-soft),
-    filter .24s var(--spring-soft),
-    box-shadow .3s var(--spring-soft);
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-#beautifyDialog.open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  filter: blur(0);
-  box-shadow: var(--g-shadow, none);
-}
-
+/* ---------- 美化设置（内联在三级界面） ---------- */
 .beautify-warn {
   margin-top: 10px;
   font-size: 11px;
@@ -1459,7 +1483,7 @@ body.jiale-bg {
 /* wrap 固定初始尺寸：展开动画不挤动旁边按钮 */
 .pick-wrap {
   position: relative;
-  width: 64px;
+  width: 104px;   /* 容纳「人数及抽取」五个字，避免文字溢出压到速度按钮 */
   height: 36px;
 }
 
@@ -1673,76 +1697,362 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-/* ---------- 首次启动引导（4 页，流光背景） ---------- */
+/* ---------- 首次启动引导（液态玻璃 · 四页轮播） ---------- */
 #onboarding {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  /* 只做高斯模糊遮罩：主界面被虚化，引导窗口浮在其上 */
+  background: rgba(20, 29, 45, .18);
+  backdrop-filter: blur(22px) saturate(1.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.06);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity .46s var(--ease-out);
+}
+html[data-theme="dark"] #onboarding { background: rgba(4, 8, 14, .42); }
+#onboarding.ready { opacity: 1; }
+#onboarding.leaving { opacity: 0; pointer-events: none; }
+
+.ob-card {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(540px, 100%);
+  max-height: min(86vh, 640px);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 26px 18px;
+  border-radius: 26px;
+  box-shadow: var(--g-shadow, none), 0 28px 80px rgba(12, 20, 36, .22);
+  opacity: 0;
+  transform: translateY(20px) scale(.96);
+  filter: blur(9px);
+  transition:
+    opacity .46s var(--ease-out),
+    transform .58s var(--spring-soft),
+    filter .5s var(--spring-soft);
+  will-change: transform, opacity, filter;
+}
+#onboarding.ready .ob-card { opacity: 1; transform: none; filter: none; }
+#onboarding.leaving .ob-card {
+  opacity: 0;
+  transform: translateY(-12px) scale(.945);
+  filter: blur(10px);
+}
+
+.ob-card [hidden] { display: none !important; }
+
+.ob-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ob-brand {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 2.2px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.ob-brand b { color: var(--ink-strong); }
+
+.ob-dots { display: flex; align-items: center; gap: 6px; }
+.ob-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(25, 35, 55, .16);
+  cursor: pointer;
+  transition: width .32s var(--spring-soft), background .3s ease;
+}
+.ob-dot.on { width: 18px; background: rgba(25, 35, 55, .55); }
+
+.ob-body {
+  position: relative;
+  flex: 1;
+  min-height: min(340px, 52vh);
+  max-height: min(64vh, 430px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.ob-body::-webkit-scrollbar { display: none; }
+
+.ob-page { display: none; }
+.ob-page.on { display: block; animation: obPageIn .46s cubic-bezier(.2, 1.08, .32, 1) both; }
+.ob-page.on.back { animation-name: obPageInBack; }
+
+@keyframes obPageIn {
+  from { opacity: 0; transform: translateX(18px); filter: blur(4px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@keyframes obPageInBack {
+  from { opacity: 0; transform: translateX(-18px); filter: blur(4px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+.ob-kicker {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 2.4px;
+  color: #5f7fae;
+  margin-bottom: 7px;
+}
+.ob-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: var(--ink-strong);
+  line-height: 1.35;
+}
+.ob-sub {
+  font-size: 12.5px;
+  line-height: 1.6;
+  letter-spacing: .2px;
+  color: var(--ink-3);
+  margin: 7px 0 15px;
+}
+
+/* ---------- 欢迎页：多语言问候，iOS 式顺滑切换 ---------- */
+.ob-welcome {
+  min-height: min(340px, 52vh);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(70% 50% at 15% 10%, rgba(170, 205, 250, .5), rgba(170, 205, 250, 0) 65%),
-    radial-gradient(60% 45% at 85% 15%, rgba(200, 225, 255, .45), rgba(200, 225, 255, 0) 65%),
-    radial-gradient(65% 55% at 50% 105%, rgba(180, 210, 248, .4), rgba(180, 210, 248, 0) 70%),
-    linear-gradient(165deg, #eef4fb, #dfeaf7 55%, #e9f0f9);
+  text-align: center;
+}
+.ob-hello {
+  height: 78px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
-
-/* 动态流光层：光斑缓慢漂移，衬托高级感 */
-#onboarding::before {
-  content: '';
-  position: absolute;
-  inset: -20%;
-  background:
-    radial-gradient(40% 30% at 30% 30%, rgba(150, 195, 255, .35), rgba(150, 195, 255, 0) 60%),
-    radial-gradient(35% 28% at 70% 60%, rgba(180, 215, 255, .3), rgba(180, 215, 255, 0) 60%);
-  animation: obDrift 14s ease-in-out infinite alternate;
-  pointer-events: none;
-}
-
-@keyframes obDrift {
-  from { transform: translate(-3%, -2%) rotate(-2deg); }
-  to   { transform: translate(3%, 2%) rotate(2deg); }
-}
-
-.ob-viewport {
-  width: min(560px, 86vw);
-  border-radius: 28px;
-}
-
-.ob-page {
-  box-sizing: border-box;
-  padding: 44px 48px;
-  text-align: center;
-  background: rgba(255, 255, 255, .82);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, .6);
-  border-radius: 28px;
-  box-shadow: 0 1px 2px rgba(25, 35, 55, .04),
-              0 16px 40px rgba(25, 35, 55, .1),
-              inset 0 1px 0 rgba(255, 255, 255, .9);
-}
-
-.ob-title { font-size: 24px; font-weight: 700; color: var(--ink); margin-bottom: 10px; letter-spacing: 1px; }
-.ob-sub { font-size: 13px; color: var(--ink-3); margin-bottom: 22px; letter-spacing: 1px; }
-.ob-text { font-size: 14px; line-height: 2.1; color: var(--ink-2); }
-
-.ob-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 28px;
-  align-items: center;
-}
-
-.ob-btn {
-  padding: 10px 28px;
-  font-size: 13px;
-  font-family: inherit;
+.ob-hello-word {
+  display: inline-block;
+  min-height: 1.1em;
+  font-size: clamp(38px, 12vw, 54px);
+  font-weight: 700;
   letter-spacing: 2px;
+  line-height: 1;
+  color: var(--ink-strong);
+}
+.ob-hello-word::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: .8em;
+  margin-left: 5px;
+  border-radius: 1px;
+  vertical-align: -.02em;
+  background: currentColor;
+  opacity: .28;
+  animation: obCaret 1s steps(1, end) infinite;
+}
+/* .glass * 的主题色过渡会覆盖子元素，这里恢复引导内需要的动效 */
+.ob-card .ob-hello-word {
+  transition: opacity .5s var(--ease-out), transform .55s cubic-bezier(.16, .84, .24, 1), filter .5s ease;
+}
+.ob-hello-word.out { opacity: 0; transform: translateY(-8px) scale(.985); filter: blur(7px); }
+.ob-hello-word.out::after { opacity: 0; animation: none; }
+@keyframes obCaret {
+  0%, 45% { opacity: .28; }
+  46%, 100% { opacity: 0; }
+}
+
+/* ---------- 设置页：直接调整，不再二次展开 ---------- */
+.ob-settings {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .38);
+  border: 1px solid rgba(25, 35, 55, .05);
+  box-shadow: inset 0 1px 2px rgba(25, 35, 55, .03);
+}
+html[data-theme="dark"] .ob-settings { background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .08); }
+
+/* ---------- 功能特色页：纯排版，不使用装饰图案 ---------- */
+.ob-list { display: grid; }
+.ob-list-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 2px;
+}
+.ob-list-row + .ob-list-row { border-top: 1px solid rgba(25, 35, 55, .07); }
+.ob-list-no {
+  flex-shrink: 0;
+  width: 20px;
+  padding-top: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.ob-list-body b { display: block; margin-bottom: 2px; font-size: 13px; font-weight: 600; letter-spacing: .2px; color: var(--ink-strong); }
+.ob-list-body span { display: block; font-size: 12px; line-height: 1.6; color: var(--ink-3); }
+html[data-theme="dark"] .ob-list-row + .ob-list-row { border-top-color: rgba(255, 255, 255, .09); }
+
+/* ---------- 佳乐庆典页：整窗暖橙，只保留文案与按钮 ---------- */
+.ob-card.glass {
+  transition:
+    opacity .46s var(--ease-out),
+    transform .58s var(--spring-soft),
+    filter .5s var(--spring-soft),
+    background .55s ease,
+    box-shadow .55s ease;
+}
+.ob-card.ob-warm {
+  background: linear-gradient(180deg, rgba(255, 241, 226, .82), rgba(255, 224, 193, .76));
+  box-shadow: var(--g-shadow, none), 0 28px 80px rgba(120, 64, 20, .16);
+}
+.ob-warm .ob-brand, .ob-warm .ob-brand b { color: #8a5420; }
+.ob-warm .ob-dot { background: rgba(122, 74, 30, .2); }
+.ob-warm .ob-dot.on { background: rgba(122, 74, 30, .62); }
+.ob-warm .ob-kicker { color: #a8722c; }
+.ob-warm .ob-title { color: #6e4516; letter-spacing: 2px; }
+.ob-warm-copy { margin-top: 10px; }
+.ob-warm-copy p {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  letter-spacing: .2px;
+  color: #7d5a34;
+}
+.ob-warm-copy p:last-child { margin-bottom: 0; }
+.ob-page[data-page="3"].on {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: min(340px, 52vh);
+}
+.ob-warm .ob-foot { border-top-color: rgba(122, 74, 30, .16); }
+.ob-warm .ob-btn { background: rgba(255, 255, 255, .48); border-color: rgba(122, 74, 30, .14); color: #6e4516; }
+.ob-warm .ob-btn.ghost { background: transparent; color: #8a6a44; }
+.ob-warm .ob-btn.primary { background: #7a4a1e; color: #fff6e8; }
+
+.ob-try {
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 18px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #fff6e8;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: #7a4a1e;
+  cursor: pointer;
+  transition: background .22s ease, transform .18s var(--spring-soft);
+}
+.ob-try:hover { background: #8a5420; }
+.ob-try:active { transform: scale(.985); }
+.ob-try.picked { cursor: default; background: #8a5420; }
+.ob-try-note { margin-top: 7px; font-size: 10.5px; letter-spacing: .3px; color: #9a7444; text-align: center; }
+
+/* 恢复引导内部的按钮/指示点过渡（不受 .glass * 全局主题过渡影响） */
+.ob-card .ob-dot { transition: width .32s var(--spring-soft), background .3s ease; }
+.ob-card .ob-btn { transition: background .2s ease, transform .15s var(--spring-soft), color .2s ease; }
+.ob-card .ob-try { transition: background .22s ease, transform .18s var(--spring-soft); }
+.ob-card .ob-seg button { transition: color .25s ease, background .25s ease, box-shadow .25s ease; }
+
+html[data-theme="dark"] .ob-card.ob-warm {
+  background: linear-gradient(180deg, rgba(84, 50, 25, .82), rgba(58, 34, 17, .78));
+  box-shadow: var(--g-shadow, none), 0 28px 80px rgba(0, 0, 0, .28);
+}
+html[data-theme="dark"] .ob-warm .ob-brand,
+html[data-theme="dark"] .ob-warm .ob-brand b { color: #f0c88d; }
+html[data-theme="dark"] .ob-warm .ob-kicker { color: #d8a866; }
+html[data-theme="dark"] .ob-warm .ob-title { color: #ffe2b8; }
+html[data-theme="dark"] .ob-warm-copy p { color: #d9c3a6; }
+html[data-theme="dark"] .ob-warm .ob-foot { border-top-color: rgba(255, 220, 170, .14); }
+html[data-theme="dark"] .ob-warm .ob-btn { background: rgba(255, 230, 190, .08); border-color: rgba(255, 220, 170, .16); color: #f0d6b0; }
+html[data-theme="dark"] .ob-warm .ob-btn.ghost { background: transparent; color: #c9ab84; }
+html[data-theme="dark"] .ob-warm .ob-btn.primary { background: #e8b878; color: #3a2410; }
+html[data-theme="dark"] .ob-warm .ob-dot { background: rgba(255, 220, 170, .2); }
+html[data-theme="dark"] .ob-warm .ob-dot.on { background: rgba(255, 220, 170, .7); }
+html[data-theme="dark"] .ob-try { background: #e8b878; color: #3a2410; }
+html[data-theme="dark"] .ob-try:hover { background: #f0c88d; }
+html[data-theme="dark"] .ob-try.picked { background: #f0c88d; }
+html[data-theme="dark"] .ob-try-note { color: #c9ab84; }
+.ob-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+.ob-row + .ob-row { border-top: 1px solid rgba(25, 35, 55, .045); }
+.ob-row-label { font-size: 12.5px; letter-spacing: .2px; color: var(--ink-2); flex-shrink: 0; }
+.ob-row .switch { margin-left: auto; }
+
+.ob-seg {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(118, 128, 150, .10);
+  box-shadow: inset 0 1px 2px rgba(20, 25, 40, .05);
+}
+.ob-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color .25s ease, background .25s ease, box-shadow .25s ease;
+}
+.ob-seg button.on {
+  background: rgba(255, 255, 255, .92);
+  color: var(--ink-strong);
+  box-shadow: 0 1px 3px rgba(25, 35, 55, .12);
+}
+.ob-swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.ob-swatch.blue { background: linear-gradient(135deg, #a9d1ff, #4a78b8); }
+.ob-swatch.dark { background: #2a3345; }
+.ob-swatch.macaron { background: linear-gradient(135deg, #ffd9e8, #cfe4ff 55%, #ffe9c9); }
+
+.ob-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(25, 35, 55, .07);
+}
+.ob-btn {
+  padding: 10px 22px;
+  font-size: 12.5px;
+  font-family: inherit;
+  letter-spacing: 1.4px;
   border-radius: 999px;
   cursor: pointer;
   color: var(--ink);
@@ -1751,17 +2061,44 @@ button:focus-visible {
   box-shadow: 0 1px 3px rgba(25, 35, 55, .08);
   transition: background .2s, transform .15s var(--spring-soft);
 }
-
 .ob-btn:hover { background: rgba(255, 255, 255, .85); }
 .ob-btn:active { transform: scale(.96); }
-
+.ob-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--ink-3);
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.ob-btn.ghost:hover { color: var(--ink-strong); background: rgba(255, 255, 255, .42); }
+.ob-cta { margin-left: auto; display: flex; gap: 8px; }
 .ob-btn.primary {
   background: rgba(25, 35, 55, .88);
   color: #ffffff;
   border-color: transparent;
 }
-
 .ob-btn.primary:hover { background: rgba(25, 35, 55, 1); }
+
+/* 引导退场后主界面轻盈入场 */
+body.ob-entering .title-area,
+body.ob-entering .top-actions {
+  animation: obUiIn .74s cubic-bezier(.2, 1.08, .32, 1) both;
+}
+body.ob-entering .top-actions { animation-delay: .04s; }
+/* 开始提示本身靠 translateY(-50%) 居中，入场只做透明度与模糊，避免位置瞬移 */
+body.ob-entering #startHint {
+  animation: obHintIn .74s cubic-bezier(.2, 1.08, .32, 1) both;
+  animation-delay: .1s;
+}
+@keyframes obUiIn {
+  from { opacity: 0; transform: translateY(16px) scale(.985); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@keyframes obHintIn {
+  from { opacity: 0; filter: blur(6px); }
+  to   { opacity: 1; filter: none; }
+}
 
 /* ---------- 降低动态效果 ---------- */
 @media (prefers-reduced-motion: reduce) {
@@ -2203,6 +2540,8 @@ html[data-theme="dark"] #inputFeedback.error { color: #f08b7f; }
 /* --- 主题切换的平滑过渡：把 background / color 纳入既有通道，0.6s 与覆盖层同步 --- */
 .glass *, .setting-item *, .history-item * { transition: color .6s ease; }
 .glass, .setting-item, .history-item { transition: background .6s ease; }
+/* .glass 的过渡规则在后面，会覆盖 .subpage 的滑入过渡：这里补回（含主题背景渐变） */
+.subpage { transition: transform .42s cubic-bezier(.22, .9, .3, 1), opacity .32s ease, background .6s ease; }
 .top-btn { transition: background .6s ease, color .3s ease, box-shadow .3s ease; }
 #resetBtn { transition: opacity .4s, background .6s ease, box-shadow .3s ease; }
 #closeBtn, .sub-back-btn { transition: color .3s ease, background .6s ease, box-shadow .3s ease; }
@@ -2213,7 +2552,7 @@ html[data-theme="dark"] #inputFeedback.error { color: #f08b7f; }
 #nameInput { transition: border-color .2s, background .6s ease, box-shadow .2s; }
 #settingsPanel { transition: opacity .22s var(--ease-out), transform .26s var(--spring-soft), filter .26s var(--spring-soft), box-shadow .32s var(--spring-soft), background .6s ease; }
 #probPoolPage { transition: opacity .2s var(--ease-out), transform .24s var(--spring-soft), filter .24s var(--spring-soft), box-shadow .3s var(--spring-soft), background .6s ease; }
-#confirmDialog, #complianceDialog, #beautifyDialog { transition: opacity .2s var(--ease-out), transform .24s var(--spring-soft), filter .24s var(--spring-soft), box-shadow .3s var(--spring-soft), background .6s ease; }
+#confirmDialog, #complianceDialog { transition: opacity .2s var(--ease-out), transform .24s var(--spring-soft), filter .24s var(--spring-soft), box-shadow .3s var(--spring-soft), background .6s ease; }
 #historyDrawer { transition: transform .3s var(--spring-soft), filter .3s var(--spring-soft), box-shadow .34s var(--spring-soft), background .6s ease; }
 #pickPop { transition: opacity .2s ease, transform .38s cubic-bezier(.34, 1.5, .5, 1), background .6s ease; }
 #speedPop { transition: opacity .2s ease, transform .38s cubic-bezier(.34, 1.5, .5, 1), background .6s ease; }
@@ -2900,6 +3239,147 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
              0 0 24px rgba(255, 186, 118, .8),
              inset 0 2px 4px rgba(255, 255, 255, .92);
 }
+/* ===== 版本 / 版权 / 性能信息 & 更新弹窗 ===== */
+/* 左下角常驻信息：极小字号、低透明度，不拦截点击，始终位于界面之上 */
+#appFooter {
+  position: fixed;
+  left: 14px;
+  bottom: 9px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 28px);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: .3px;
+  color: var(--ink-3);
+  opacity: .5;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
+  transition: color .6s ease, opacity .3s ease;
+}
+html[data-theme="dark"] #appFooter {
+  color: #aeb9cc;
+  opacity: .42;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+}
+#appFooter .af-sep { opacity: .6; }
+#perfInfo {
+  padding-left: 7px;
+  border-left: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .2px;
+}
+#perfInfo[hidden] { display: none; }
+
+/* 更新提示弹窗 */
+#updateOverlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+#updateDialog {
+  width: min(380px, 88vw);
+  padding: 22px 24px 20px;
+  opacity: 0;
+  transform: translateY(8px) scale(.97);
+  filter: blur(6px);
+  transition: opacity .22s var(--ease-out), transform .26s var(--spring-soft), filter .26s var(--spring-soft);
+  user-select: none;
+  -webkit-user-select: none;
+}
+#updateOverlay.show #updateDialog { opacity: 1; transform: none; filter: none; }
+.update-title { font-size: 17px; font-weight: 700; letter-spacing: .5px; color: var(--ink-strong); }
+.update-ver { margin-top: 6px; font-size: 11.5px; letter-spacing: .3px; color: var(--ink-3); }
+.update-ver b { color: #4a78b8; font-weight: 600; }
+html[data-theme="dark"] .update-ver b { color: #9dbfe8; }
+.update-log {
+  margin-top: 14px;
+  padding: 12px 14px;
+  max-height: 210px;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .34);
+  border: 1px solid rgba(25, 35, 55, .05);
+  box-shadow: inset 0 1px 2px rgba(25, 35, 55, .03);
+  font-size: 12.5px;
+  line-height: 1.75;
+  letter-spacing: .2px;
+  color: var(--ink-2);
+  white-space: pre-line;
+}
+html[data-theme="dark"] .update-log {
+  background: rgba(255, 255, 255, .055);
+  border-color: rgba(255, 255, 255, .08);
+}
+#updateDialog .confirm-btns { margin-top: 16px; }
+#updateOkBtn { color: var(--ink-strong); font-weight: 600; }
+
+/* 其他功能：性能开关行 */
+.perf-row .row-label { margin-bottom: 2px; }
+.perf-row .row-desc { margin: 0; }
+
+/* ---------- 恢复默认设置：确认弹窗 + 轻提示 ---------- */
+#resetDefaultsOverlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 120;
+}
+#resetDefaultsDialog {
+  width: min(300px, 82vw);
+  padding: 22px 24px 20px;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(6px) scale(.97);
+  filter: blur(6px);
+  transition:
+    opacity .2s var(--ease-out),
+    transform .24s var(--spring-soft),
+    filter .24s var(--spring-soft);
+  user-select: none;
+  -webkit-user-select: none;
+}
+#resetDefaultsOverlay.show #resetDefaultsDialog {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+#resetDefaultsConfirm { color: var(--ink-strong); font-weight: 600; }
+
+#resetDefaultsToast {
+  position: fixed;
+  left: 50%;
+  top: 16px;
+  z-index: 900;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  letter-spacing: .5px;
+  color: var(--ink-strong);
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid rgba(255, 255, 255, .6);
+  box-shadow: 0 10px 26px rgba(25, 35, 55, .12), inset 0 1px 0 rgba(255, 255, 255, .85);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(-6px);
+  transition: opacity .28s ease, transform .32s var(--spring-soft);
+}
+#resetDefaultsToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+html[data-theme="dark"] #resetDefaultsToast {
+  background: rgba(30, 38, 52, .8);
+  color: #e8eef8;
+  border-color: rgba(255, 255, 255, .12);
+}
+
 /* ===== end fixes & options ===== */
 </style>
 <script>
@@ -2931,35 +3411,392 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
 </script>
 </head>
 <body>
-  <!-- 首次启动引导（单页） -->
-  <div id="onboarding">
-    <div class="ob-viewport">
-      <div class="ob-page">
-        <div class="ob-title">随机人员生成器 V6</div>
-        <div class="ob-sub">课堂随机抽取工具</div>
-        <div class="ob-text">
-          支持 1~4 人抽取，结果互不重复。<br>
-          抽取历史本地保存，可随时查阅与清空。<br>
-          内置公平性自检，实时显示校验状态。<br>
-          支持自定义概率权重，调整后标记为非公平状态。<br>
-          跳动速度可调，支持界面美化开关。
+  <!-- 首次启动引导（液态玻璃 · 四页轮播） -->
+  <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
+    <div class="ob-card glass mat-modal">
+      <div class="ob-top">
+        <div class="ob-brand">随机人员生成器 <b>V6.1</b></div>
+        <div class="ob-dots" role="tablist" aria-label="引导页切换">
+          <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
+          <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
+          <button class="ob-dot" type="button" data-ob-page="2" aria-label="第 3 页：功能特色"></button>
+          <button class="ob-dot" type="button" data-ob-page="3" aria-label="第 4 页：佳乐庆典"></button>
         </div>
-        <div class="ob-actions">
-          <button id="obStartBtn" class="ob-btn primary" type="button">开始使用</button>
+      </div>
+
+      <div class="ob-body" id="obBody">
+        <section class="ob-page on" data-page="0">
+          <div class="ob-welcome">
+            <div class="ob-hello" aria-hidden="true"><span class="ob-hello-word">你好</span></div>
+          </div>
+        </section>
+
+        <section class="ob-page" data-page="1">
+          <div class="ob-kicker">SETUP</div>
+          <div class="ob-title">调整默认设置</div>
+          <div class="ob-sub">引导结束后立即生效，之后可在设置中修改</div>
+          <div class="ob-settings">
+            <div class="ob-row">
+              <span class="ob-row-label">抽取方式</span>
+              <div class="ob-seg" data-ob-preset-seg>
+                <button type="button" data-ob-preset="h">横向</button>
+                <button type="button" data-ob-preset="meteor" class="on">流星</button>
+                <button type="button" data-ob-preset="classic">经典</button>
+              </div>
+            </div>
+            <div class="ob-row" data-ob-star-row>
+              <span class="ob-row-label">Star 节奏</span>
+              <div class="ob-seg" data-ob-star-seg>
+                <button type="button" data-ob-star="once">Once</button>
+                <button type="button" data-ob-star="ind" class="on">Ind</button>
+              </div>
+            </div>
+            <div class="ob-row">
+              <span class="ob-row-label">主题</span>
+              <div class="ob-seg" data-ob-theme-seg>
+                <button type="button" data-ob-theme="blue"><i class="ob-swatch blue"></i>蓝色</button>
+                <button type="button" data-ob-theme="dark"><i class="ob-swatch dark"></i>暗色</button>
+                <button type="button" data-ob-theme="macaron" class="on"><i class="ob-swatch macaron"></i>马卡龙</button>
+              </div>
+            </div>
+            <div class="ob-row">
+              <span class="ob-row-label">兼容模式</span>
+              <label class="switch"><input type="checkbox" id="obCompat"><span class="switch-track"></span></label>
+            </div>
+            <div class="ob-row">
+              <span class="ob-row-label">抽取后趣味寄语</span>
+              <label class="switch"><input type="checkbox" id="obFunMsg"><span class="switch-track"></span></label>
+            </div>
+            <div class="ob-row">
+              <span class="ob-row-label">奶龙装饰彩蛋</span>
+              <label class="switch"><input type="checkbox" id="obNylon"><span class="switch-track"></span></label>
+            </div>
+            <div class="ob-row">
+              <span class="ob-row-label">流光背景</span>
+              <label class="switch"><input type="checkbox" id="obFlow" checked><span class="switch-track"></span></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="ob-page" data-page="2">
+          <div class="ob-kicker">FEATURES</div>
+          <div class="ob-title">功能特色</div>
+          <div class="ob-sub">为课堂随机抽取而设计</div>
+          <div class="ob-list">
+            <div class="ob-list-row">
+              <span class="ob-list-no">01</span>
+              <div class="ob-list-body"><b>三种抽取方式</b><span>流星、横向滚动、经典，按场景自由切换。</span></div>
+            </div>
+            <div class="ob-list-row">
+              <span class="ob-list-no">02</span>
+              <div class="ob-list-body"><b>1–4 人抽取</b><span>支持逐个或单次抽取，结果不重复。</span></div>
+            </div>
+            <div class="ob-list-row">
+              <span class="ob-list-no">03</span>
+              <div class="ob-list-body"><b>本机历史记录</b><span>抽取结果自动保存，随时回看与清空。</span></div>
+            </div>
+            <div class="ob-list-row">
+              <span class="ob-list-no">04</span>
+              <div class="ob-list-body"><b>显示与兼容</b><span>主题、兼容模式、装饰开关均可随时调整。</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="ob-page" data-page="3">
+          <div class="ob-kicker">SIGNATURE MODE</div>
+          <div class="ob-title">佳乐庆典</div>
+          <div class="ob-warm-copy">
+            <p>这是投入大量心血打磨的专属庆典模式。开启后，整个抽取界面会切换为暖橙色视觉。</p>
+            <p>流星模式下只出现「周佳乐」，彩色字贴图与深暖柔边，落定后奏响庆典和弦；横向滚动、经典抽取与八人模式也会同步呈现专属庆祝动效。</p>
+          </div>
+          <button id="obTryJialeBtn" class="ob-try" type="button">
+            <span class="ob-try-label">试用佳乐庆典</span>
+          </button>
+          <div class="ob-try-note">进入主界面后自动开启</div>
+        </section>
+      </div>
+
+      <div class="ob-foot">
+        <button id="obSkipBtn" class="ob-btn ghost" type="button">直接进入</button>
+        <div class="ob-cta">
+          <button id="obNextBtn" class="ob-btn primary" type="button">下一步</button>
+          <button id="obDoneBtn" class="ob-btn primary" type="button" hidden>确认设置并进入</button>
         </div>
       </div>
     </div>
   </div>
+  <script>
+  // ==========================================================
+  // 首次启动引导：欢迎 / 默认设置 / 功能特色 / 佳乐庆典
+  // 只在本机第一次打开时出现；恢复默认会清除标记并重新进入引导
+  // ==========================================================
+  (function () {
+    'use strict';
+    var ONBOARD_KEY = 'onboarding_done_v4';   // 重做引导：v4 让老用户也只看一次新引导
+    var BOOT_DEFAULTS = {
+      preset: 'meteor', star: 'ind', theme: 'macaron',
+      compat: false, funMsg: false, nylon: false, flowBg: true
+    };
+    window.__lgBootDefaults = BOOT_DEFAULTS;
+
+    function store(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+
+    /* 优先驱动现有控件：模块内部状态与本地存储一起更新 */
+    function setToggle(id, on, key) {
+      var el = document.getElementById(id);
+      if (el && el.checked !== !!on) {
+        el.checked = !!on;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (key) store(key, on ? '1' : '0');
+    }
+
+    window.__lgApplyBootConfig = function (cfg) {
+      cfg = cfg || BOOT_DEFAULTS;
+
+      var theme = document.querySelector('.theme-opt[data-theme="' + cfg.theme + '"]');
+      if (theme) theme.click();
+      else {
+        store('lottery_theme_v1', cfg.theme);
+        if (cfg.theme === 'blue') document.documentElement.removeAttribute('data-theme');
+        else document.documentElement.setAttribute('data-theme', cfg.theme);
+      }
+
+      var preset = document.querySelector('#lxRow [data-lx="' + cfg.preset + '"]');
+      if (preset) preset.click();
+      else {
+        var m = cfg.preset === 'classic' ? 'c' : cfg.preset;
+        store('lg_hscroll_v1', m);
+        try { window.dispatchEvent(new CustomEvent('lg-preset', { detail: m })); } catch (e) {}
+      }
+
+      store('lg_star_mode_v1', cfg.star);
+      var star = document.querySelector('#lxStarRow [data-star="' + cfg.star + '"]');
+      if (star) {
+        /* 非流星预设下行是 inert 的，但 click() 仍会同步模块内部状态；
+           庆典期间 Ind 被禁用时只落盘，等下次加载生效，避免界面/行为不一致 */
+        if (!star.disabled) star.click();
+      } else {
+        try { window.dispatchEvent(new CustomEvent('lg-star', { detail: cfg.star })); } catch (e) {}
+      }
+
+      setToggle('compatToggle', cfg.compat, 'lg_compat_v1');
+      setToggle('funMsgToggle', cfg.funMsg, 'lottery_funmsg_v1');
+      setToggle('nylonToggle', cfg.nylon, 'nailong_enabled');
+      setToggle('flowBgToggle', cfg.flowBg, 'flow_bg_enabled');
+    };
+
+    var ob = document.getElementById('onboarding');
+    if (!ob) return;
+
+    var seen = false;
+    try { seen = localStorage.getItem(ONBOARD_KEY) === '1'; } catch (e) { seen = true; }
+    if (seen) { ob.style.display = 'none'; return; }
+
+    store(ONBOARD_KEY, '1');            // 只在首次打开出现
+    requestAnimationFrame(function () { ob.classList.add('ready'); });
+
+    var pages = Array.prototype.slice.call(ob.querySelectorAll('.ob-page'));
+    var dots = Array.prototype.slice.call(ob.querySelectorAll('.ob-dot'));
+    var bodyBox = document.getElementById('obBody');
+    var nextBtn = document.getElementById('obNextBtn');
+    var doneBtn = document.getElementById('obDoneBtn');
+    var skipBtn = document.getElementById('obSkipBtn');
+    var card = ob.querySelector('.ob-card');
+    var idx = 0, closing = false;
+
+    /* 欢迎页：多语言问候逐字打出，停留约 3.5s 后模糊淡出并切换下一种 */
+    var helloWord = ob.querySelector('.ob-hello-word');
+    var HELLO_WORDS = ['你好', 'Hello', 'Bonjour', 'こんにちは', '안녕하세요', 'Hola'];
+    var helloIdx = 0, helloTimer = 0, helloTypeTimer = 0, helloToken = 0, helloActive = false;
+    var HELLO_HOLD = 3500, HELLO_FADE = 480, HELLO_TYPE = 80;
+
+    function typeHello(word, token) {
+      var i = 0;
+      helloWord.textContent = '';
+      (function step() {
+        if (token !== helloToken) return;
+        helloWord.textContent = word.slice(0, ++i);
+        if (i < word.length) helloTypeTimer = setTimeout(step, HELLO_TYPE);
+      })();
+    }
+
+    function startHello() {
+      if (!helloWord || helloActive) return;
+      helloActive = true;
+      var token = ++helloToken;
+      (function cycle() {
+        if (token !== helloToken || idx !== 0 || closing) return;
+        var word = HELLO_WORDS[helloIdx];
+        helloWord.classList.remove('out');
+        typeHello(word, token);
+        /* 打字完成后再停留 3.5s，随后模糊淡出切换到下一种语言 */
+        helloTimer = setTimeout(function () {
+          if (token !== helloToken || idx !== 0 || closing) return;
+          helloWord.classList.add('out');
+          helloTimer = setTimeout(function () {
+            if (token !== helloToken || idx !== 0 || closing) return;
+            helloIdx = (helloIdx + 1) % HELLO_WORDS.length;
+            helloWord.classList.remove('out');
+            cycle();
+          }, HELLO_FADE);
+        }, HELLO_TYPE * word.length + HELLO_HOLD);
+      })();
+    }
+    function stopHello() {
+      helloActive = false;
+      helloToken++;
+      clearTimeout(helloTimer);
+      clearTimeout(helloTypeTimer);
+      helloTimer = helloTypeTimer = 0;
+      if (helloWord) {
+        helloWord.classList.remove('out');
+        helloWord.textContent = HELLO_WORDS[helloIdx];
+      }
+    }
+
+    function show(n, back) {
+      n = Math.max(0, Math.min(pages.length - 1, n));
+      if (n === idx && pages[idx].classList.contains('on')) return;
+      var goingBack = back === undefined ? n < idx : !!back;
+      idx = n;
+      for (var i = 0; i < pages.length; i++) {
+        var on = i === idx;
+        pages[i].classList.toggle('on', on);
+        pages[i].classList.toggle('back', on && goingBack);
+      }
+      for (var j = 0; j < dots.length; j++) {
+        dots[j].classList.toggle('on', j === idx);
+        dots[j].setAttribute('aria-current', j === idx ? 'step' : 'false');
+      }
+      var last = idx === pages.length - 1;
+      if (nextBtn) nextBtn.hidden = last;
+      if (doneBtn) doneBtn.hidden = !last;
+      if (bodyBox) bodyBox.scrollTop = 0;
+      if (card) card.classList.toggle('ob-warm', last);
+      if (idx === 0) startHello(); else stopHello();
+    }
+
+    for (var d = 0; d < dots.length; d++) {
+      (function (i) {
+        dots[i].addEventListener('click', function (e) {
+          e.stopPropagation();
+          show(i);
+        });
+      })(d);
+    }
+    if (nextBtn) nextBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      show(idx + 1);
+    });
+
+    /* ---------- 第 4 页：佳乐庆典（点击试用 = 进入主界面后开启常驻庆典） ---------- */
+    var jialeWanted = false;
+    var tryJialeBtn = document.getElementById('obTryJialeBtn');
+    if (tryJialeBtn) {
+      tryJialeBtn.setAttribute('aria-pressed', 'false');
+      tryJialeBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (jialeWanted) return;
+        jialeWanted = true;
+        tryJialeBtn.classList.add('picked');
+        tryJialeBtn.setAttribute('aria-pressed', 'true');
+        var label = tryJialeBtn.querySelector('.ob-try-label');
+        if (label) label.textContent = '已启用';
+      });
+    }
+
+    /* ---------- 第 2 页：初始设置（进入前统一生效） ---------- */
+    var staged = {
+      preset: BOOT_DEFAULTS.preset, star: BOOT_DEFAULTS.star, theme: BOOT_DEFAULTS.theme,
+      compat: BOOT_DEFAULTS.compat, funMsg: BOOT_DEFAULTS.funMsg,
+      nylon: BOOT_DEFAULTS.nylon, flowBg: BOOT_DEFAULTS.flowBg
+    };
+
+    function markSeg(seg, attr, value) {
+      if (!seg) return;
+      var btns = seg.querySelectorAll('[' + attr + ']');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('on', btns[i].getAttribute(attr) === value);
+      }
+    }
+    var presetSeg = ob.querySelector('[data-ob-preset-seg]');
+    var starSeg = ob.querySelector('[data-ob-star-seg]');
+    var themeSeg = ob.querySelector('[data-ob-theme-seg]');
+    var starRow = ob.querySelector('[data-ob-star-row]');
+    function syncSegs() {
+      markSeg(presetSeg, 'data-ob-preset', staged.preset);
+      markSeg(starSeg, 'data-ob-star', staged.star);
+      markSeg(themeSeg, 'data-ob-theme', staged.theme);
+      if (starRow) starRow.hidden = staged.preset !== 'meteor';
+    }
+    function bindSeg(seg, attr, key) {
+      if (!seg) return;
+      seg.addEventListener('click', function (e) {
+        var t = e.target && e.target.closest ? e.target.closest('[' + attr + ']') : null;
+        if (!t) return;
+        e.stopPropagation();
+        staged[key] = t.getAttribute(attr);
+        syncSegs();
+      });
+    }
+    bindSeg(presetSeg, 'data-ob-preset', 'preset');
+    bindSeg(starSeg, 'data-ob-star', 'star');
+    bindSeg(themeSeg, 'data-ob-theme', 'theme');
+    [['obCompat', 'compat'], ['obFunMsg', 'funMsg'], ['obNylon', 'nylon'], ['obFlow', 'flowBg']].forEach(function (pair) {
+      var el = document.getElementById(pair[0]);
+      if (el) el.addEventListener('change', function () { staged[pair[1]] = !!el.checked; });
+    });
+
+    function finish(cfg) {
+      if (closing) return;
+      closing = true;
+      stopHello();
+      try { window.__lgApplyBootConfig(cfg); } catch (e) {}
+      /* 试用佳乐庆典：与其他设置同时生效，进入主界面即处于常驻庆典状态 */
+      if (jialeWanted) {
+        try { if (window.__lgJiale) window.__lgJiale.set(true, true); } catch (e) {}
+      }
+      document.body.classList.add('ob-entering');
+      ob.classList.add('leaving');
+      setTimeout(function () {
+        ob.style.display = 'none';
+        ob.classList.remove('leaving', 'ready');
+        document.body.classList.remove('ob-entering');
+      }, 820);
+    }
+    if (skipBtn) skipBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      finish(BOOT_DEFAULTS);
+    });
+    if (doneBtn) doneBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      finish(staged);
+    });
+
+    /* 整层拦住冒泡：引导里的点击不穿透到「点屏幕开始/停止」 */
+    ob.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    document.addEventListener('keydown', function (e) {
+      if (closing || ob.style.display === 'none') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); show(idx + 1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); show(idx - 1, true); }
+    });
+
+    syncSegs();
+    startHello();
+  })();
+  </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V6</div>
+    <div id="title">随机人员生成器 V6.1</div>
     <button id="complianceDot" type="button" aria-label="合规状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
   </div>
   <div class="top-actions">
     <div class="pick-wrap" id="pickWrap">
       <button id="pickBtn" class="top-btn" type="button">
-        <span class="speed-label">人数</span>
+        <span class="speed-label">人数及抽取</span>
       </button>
       <div id="pickPop" class="glass mat-floating">
         <div class="pick-label">抽取人数</div>
@@ -3019,37 +3856,125 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
       </div>
 
       <div class="settings-list">
-        <div class="setting-item">
-          <div class="row-label">定向规避</div>
-          <div class="row-desc">加入规避名单后，下次抽奖将自动跳过该人员</div>
-          <div class="input-row">
-            <div class="input-wrap">
-              <input type="text" id="nameInput" placeholder="输入姓名 / 首字母 / 单字" maxlength="10">
-            </div>
-            <button id="confirmBtn" type="button">确认</button>
+        <div id="probGroupLink" class="group-card">
+          <span class="gc-ico" aria-hidden="true">🎲</span>
+          <span class="gc-body">
+            <span class="gc-title">概率相关</span>
+            <span class="gc-sub">概率分配池 · 合规自检</span>
+          </span>
+          <span class="link-arrow">›</span>
+        </div>
+
+        <div id="beautyGroupLink" class="group-card">
+          <span class="gc-ico" aria-hidden="true">✨</span>
+          <span class="gc-body">
+            <span class="gc-title">美化相关</span>
+            <span class="gc-sub">UI 美化</span>
+          </span>
+          <span class="link-arrow">›</span>
+        </div>
+
+        <div id="otherGroupLink" class="group-card">
+          <span class="gc-ico" aria-hidden="true">⚙️</span>
+          <span class="gc-body">
+            <span class="gc-title">其他功能</span>
+            <span class="gc-sub">指定人员 · 关于此程序</span>
+          </span>
+          <span class="link-arrow">›</span>
+        </div>
+      </div>
+
+      <!-- 三级界面：概率相关 -->
+      <div id="probGroupPage" class="subpage glass mat-subpage">
+        <div class="sub-header">
+          <button id="probGroupBackBtn" class="sub-back-btn" type="button">←</button>
+          <span>概率相关</span>
+        </div>
+        <div class="settings-list">
+          <div id="probPoolLink" class="setting-item setting-link">
+            <span class="link-label">概率分配池</span>
+            <span class="link-arrow">›</span>
           </div>
-          <div id="inputFeedback"></div>
-        </div>
 
-        <div id="probPoolLink" class="setting-item setting-link">
-          <span class="link-label">概率分配池</span>
-          <span class="link-arrow">›</span>
+          <div id="panelComplianceBtn" class="setting-item setting-link">
+            <span class="link-label">合规自检</span>
+            <span class="link-state">合规校验通过</span>
+            <span class="link-arrow">›</span>
+          </div>
         </div>
+      </div>
 
-        <div id="panelComplianceBtn" class="setting-item setting-link">
-          <span class="link-label">合规自检</span>
-          <span class="link-state">合规校验通过</span>
-          <span class="link-arrow">›</span>
+      <!-- 三级界面：美化相关 -->
+      <div id="beautyGroupPage" class="subpage glass mat-subpage">
+        <div class="sub-header">
+          <button id="beautyGroupBackBtn" class="sub-back-btn" type="button">←</button>
+          <span>美化相关</span>
         </div>
-
-        <div id="beautifyLink" class="setting-item setting-link">
-          <span class="link-label">UI 美化</span>
-          <span class="link-arrow">›</span>
+        <div class="settings-list">
+          <div class="setting-item beautify-row">
+            <span class="link-label">奶龙装饰彩蛋</span>
+            <label class="switch">
+              <input type="checkbox" id="nylonToggle">
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div class="setting-item beautify-row">
+            <span class="link-label">流光背景</span>
+            <label class="switch">
+              <input type="checkbox" id="flowBgToggle">
+              <span class="switch-track"></span>
+            </label>
+          </div>
+          <div class="setting-item beautify-row">
+            <span class="link-label">抽取后显示趣味寄语</span>
+            <label class="switch">
+              <input type="checkbox" id="funMsgToggle">
+              <span class="switch-track"></span>
+            </label>
+          </div>
         </div>
+        <div class="beautify-warn">此为实验性功能，装饰元素可能随时调整</div>
+      </div>
 
-        <div id="aboutLink" class="setting-item setting-link">
-          <span class="link-label">关于此程序</span>
-          <span class="link-arrow">›</span>
+      <!-- 三级界面：其他功能 -->
+      <div id="otherGroupPage" class="subpage glass mat-subpage">
+        <div class="sub-header">
+          <button id="otherGroupBackBtn" class="sub-back-btn" type="button">←</button>
+          <span>其他功能</span>
+        </div>
+        <div class="settings-list">
+          <div class="setting-item">
+            <div class="row-label">指定人员</div>
+            <div class="row-desc">输入姓名后，该人员将必定被抽中</div>
+            <div class="input-row">
+              <div class="input-wrap">
+                <input type="text" id="nameInput" placeholder="输入姓名 / 首字母 / 单字" maxlength="10">
+              </div>
+              <button id="confirmBtn" type="button">确认</button>
+            </div>
+            <div id="inputFeedback"></div>
+          </div>
+
+          <div class="setting-item beautify-row perf-row">
+            <div>
+              <div class="row-label">显示性能信息</div>
+              <div class="row-desc">左下角追加 FPS / CPU / GPU</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="perfToggle">
+              <span class="switch-track"></span>
+            </label>
+          </div>
+
+          <div id="resetDefaultsLink" class="setting-item setting-link" role="button" tabindex="0">
+            <span class="link-label">恢复默认设置</span>
+            <span class="link-arrow">›</span>
+          </div>
+
+          <div id="aboutLink" class="setting-item setting-link">
+            <span class="link-label">关于此程序</span>
+            <span class="link-arrow">›</span>
+          </div>
         </div>
       </div>
 
@@ -3060,9 +3985,15 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V6 <span class="pro-gold">Pro</span>
+      版本号：V6.1 <span class="pro-gold">Pro</span>
       更新日志：
-      V6 <span class="pro-gold">Pro</span>
+      V6.1 <span class="pro-gold">Pro</span>
+      · 重做首次启动引导：四页液态玻璃轮播，覆盖欢迎、默认设置、功能特色与佳乐庆典
+      · 欢迎页多语言逐字打出，每种语言停留约 3.5 秒后模糊淡出并平滑切换
+      · 佳乐庆典页改为整窗暖橙并降低不透明度，可在引导内直接试用，进入主界面自动开启
+      · 引导退场与主界面柔和衔接，修复「轻触任意处以开始」位置瞬移
+      · 「其他功能」新增恢复默认设置：二次确认后一键回到出厂配置，并重新进入引导
+      V6.0 <span class="pro-gold">Pro</span>
       · 流星模式新增 Star 节奏：Once 整名定格 / Ind 逐字轻点抽取，抽满最后一字立即归位
       · 结果动画重排：压暗 → 停留或逐字 → 非线性归位；道喜与开奖音效统一移到全部居中之后
       · Ind 抽取新增底部轻提示，实时显示进度 n / N，抽完后自动退场
@@ -3071,6 +4002,8 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
       · 归位曲线改为快出慢收，消除衔接处的停顿感
       · 结果名字改为纯墨色（暗色主题自动反白），不再有蓝色高光
       · 人数与抽取方式统一为分段滑轨；修复庆典彩色字在暖橙底上的可读性
+      · 左下角常驻版本号与版权信息；「其他功能」新增显示性能信息（FPS / CPU / GPU）
+      · 启动时校验线上 version.json，检测到更高版本弹出更新提示
       5.1 <span class="pro-gold">Pro</span>
       · <span class="log-red">修复了蛋周佳乐无法被选中的bug</span>
       5.0 <span class="pro-gold">Pro</span>
@@ -3120,7 +4053,7 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
       · 新增概率分配池及合规性校验
       · 深度优化 UI 显示，提升观感
       1.0.2
-      · 添加了定向规避
+      · 添加了指定人员
       · 添加了历史记录显示功能
       · 重写了 glassUI（demo）
         </div>
@@ -3166,6 +4099,16 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     </div>
   </div>
 
+  <div id="resetDefaultsOverlay" class="scrim" role="dialog" aria-modal="true" aria-labelledby="resetDefaultsText">
+    <div id="resetDefaultsDialog" class="glass mat-modal">
+      <div id="resetDefaultsText" class="confirm-text">确定全部设置恢复默认吗？该操作不可撤回</div>
+      <div class="confirm-btns">
+        <button id="resetDefaultsCancel" class="dialog-btn" type="button">取消</button>
+        <button id="resetDefaultsConfirm" class="dialog-btn" type="button">恢复默认</button>
+      </div>
+    </div>
+  </div>
+
   <div id="complianceOverlay" class="scrim">
     <div id="complianceDialog" class="glass mat-modal">
       <div class="drawer-header">
@@ -3178,62 +4121,27 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     </div>
   </div>
 
-  <!-- 美化设置弹窗 -->
-  <div id="beautifyOverlay" class="scrim">
-    <div id="beautifyDialog" class="glass mat-modal">
-      <div class="drawer-header">
-        <span>UI 美化</span>
-        <button id="beautifyCloseBtn" class="sub-back-btn" type="button">×</button>
+  <!-- 版本更新提示（仅提示，不强制刷新） -->
+  <div id="updateOverlay" class="scrim">
+    <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
+      <div id="updateTitle" class="update-title">检测到新版本</div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V 6.1</span></div>
+      <div id="updateLog" class="update-log"></div>
+      <div class="confirm-btns">
+        <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
       </div>
-      <div class="setting-item beautify-row">
-        <span class="link-label">奶龙装饰彩蛋</span>
-        <label class="switch">
-          <input type="checkbox" id="nylonToggle">
-          <span class="switch-track"></span>
-        </label>
-      </div>
-      <div class="setting-item beautify-row">
-        <span class="link-label">流光背景</span>
-        <label class="switch">
-          <input type="checkbox" id="flowBgToggle">
-          <span class="switch-track"></span>
-        </label>
-      </div>
-      <div class="setting-item beautify-row">
-        <span class="link-label">抽取后显示趣味寄语</span>
-        <label class="switch">
-          <input type="checkbox" id="funMsgToggle">
-          <span class="switch-track"></span>
-        </label>
-      </div>
-      <div class="beautify-warn">此为实验性功能，装饰元素可能随时调整</div>
     </div>
   </div>
 
+  <!-- 左下角常驻：版本 + 版权（不可关闭）；性能信息由设置项控制 -->
+  <div id="appFooter" aria-hidden="true">
+    <span class="af-ver" id="footerVer">V 6.1</span>
+    <span class="af-sep">|</span>
+    <span class="af-copy">Qicny © All Rights Reserved</span>
+    <span id="perfInfo" hidden></span>
+  </div>
+
   <script>
-// ==========================================================
-// 首次启动引导：单页简介，localStorage 记录已看过
-// ==========================================================
-(function () {
-  var ONBOARD_KEY = 'onboarding_done_v3';
-
-  function seen() {
-    try { return localStorage.getItem(ONBOARD_KEY) === '1'; } catch (e) { return true; }
-  }
-
-  var ob = document.getElementById('onboarding');
-  if (seen()) {
-    ob.style.display = 'none';
-    return;
-  }
-
-  document.getElementById('obStartBtn').addEventListener('click', function () {
-    try { localStorage.setItem(ONBOARD_KEY, '1'); } catch (e) {}
-    ob.style.display = 'none';
-  });
-})();
-</script>
-<script>
 (function () {
   var NAMES = [
     { id: 1, name: "田寿康", py: "tsk" }, { id: 2, name: "陈敬杰", py: "cjj" }, { id: 3, name: "丁小龙", py: "dxl" },
@@ -3308,6 +4216,15 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
   var aboutLink = document.getElementById('aboutLink');
   var aboutPage = document.getElementById('aboutPage');
   var aboutBackBtn = document.getElementById('aboutBackBtn');
+  var probGroupLink = document.getElementById('probGroupLink');
+  var probGroupPage = document.getElementById('probGroupPage');
+  var probGroupBackBtn = document.getElementById('probGroupBackBtn');
+  var beautyGroupLink = document.getElementById('beautyGroupLink');
+  var beautyGroupPage = document.getElementById('beautyGroupPage');
+  var beautyGroupBackBtn = document.getElementById('beautyGroupBackBtn');
+  var otherGroupLink = document.getElementById('otherGroupLink');
+  var otherGroupPage = document.getElementById('otherGroupPage');
+  var otherGroupBackBtn = document.getElementById('otherGroupBackBtn');
   var historyBtn = document.getElementById('historyBtn');
   var historyDrawer = document.getElementById('historyDrawer');
   var historyOverlay = document.getElementById('historyOverlay');
@@ -3333,10 +4250,6 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
   var speedWrap = document.getElementById('speedWrap');
   var speedPop = document.getElementById('speedPop');
   var speedValue = document.getElementById('speedValue');
-  var beautifyLink = document.getElementById('beautifyLink');
-  var beautifyOverlay = document.getElementById('beautifyOverlay');
-  var beautifyDialog = document.getElementById('beautifyDialog');
-  var beautifyCloseBtn = document.getElementById('beautifyCloseBtn');
   var nylonToggle = document.getElementById('nylonToggle');
   var flowBgToggle = document.getElementById('flowBgToggle');
   var nameSuggest = document.getElementById('nameSuggest');
@@ -3362,7 +4275,7 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
   var LONG_PRESS_MS = 600;        // 标题长按判定时长
   var pressTimer = null;          // 标题长按计时器
 
-  var forcedName = null;          // 戏谑“反向命中”：对外宣称规避，实际强制必中
+  var forcedName = null;          // 指定人员：输入谁，下一次停止就强制抽中谁
   var jialeMode = false;          // “always 佳乐”彩蛋：仅周佳乐三元素跳动
   var feedbackTimer = null;       // 提示文字自动消失计时器
 
@@ -3781,11 +4694,17 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     } catch (e) { /* 音频不可用时静默忽略 */ }
   }
 
+  /* 流星模式下音效统一由流星模块在结果归位完成后播放；
+     应用侧定格时不再出声，避免同一次抽取响两遍。 */
+  function metAudioOwned() {
+    return document.documentElement.classList.contains('lx-met');
+  }
+
   // ---------- 交互 ----------
   function stop() {
     if (phase !== 'spinning' || panelOpen || drawerOpen) return;
 
-    // 戏谑“反向命中”：作用于即将定格的结果，仅生效一次
+    // 指定人员：作用于即将定格的结果，仅生效一次
     if (forcedName !== null) {
       var forcedWasJiale = (forcedName === '周佳乐');
       slots[settledIdx].textContent = forcedName;
@@ -3798,7 +4717,7 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     if (pickMode === 'one' && settledIdx < pickCount - 1) {
       settleSlot(settledIdx);
       settledIdx++;
-      playStopSound();
+      if (!metAudioOwned()) playStopSound();
       return;
     }
 
@@ -3828,14 +4747,14 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     // 逐人记录本次抽奖结果
     for (var k = 0; k < pickCount; k++) addHistory(slots[k].textContent);
 
-    playStopSound();
+    if (!metAudioOwned()) playStopSound();
     hintEl.classList.add('hidden');
     document.body.classList.add('stopped');
 
     congratsEl.textContent = pickCount > 1 ? '恭喜你们' : '恭喜你'; // 多人抽取文案
     congratsEl.classList.add('show');
     if (wonJiale) {
-      playJialeSound();      // 华丽庆祝音效
+      if (!metAudioOwned()) playJialeSound();      // 华丽庆祝音效（流星模式交给归位音效）
       startFireworks(true);  // 5 秒礼花喷射
     } else {
       startFireworks(false);
@@ -3883,6 +4802,9 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     panelOpen = false;
     overlay.classList.remove('show');
     aboutPage.classList.remove('open');
+    probGroupPage.classList.remove('open');
+    beautyGroupPage.classList.remove('open');
+    otherGroupPage.classList.remove('open');
     probPoolOverlay.classList.remove('show');
     hideSuggest();
     closeClearConfirm();
@@ -4028,9 +4950,9 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     hideSuggest();
     if (found) {
       forcedName = name; // 后台静默标记：下一次停止强制必中，抽中后自动清空
-      if (name === '周佳乐') document.body.classList.add('jiale-bg'); // 定向周佳乐：背景渐变暖橙
-      showFeedback('已成功加入规避列表，下一次抽奖将过滤该人员', false);
-      refreshCompliance(); // 后门已激活，实时刷新合规状态
+      if (name === '周佳乐') document.body.classList.add('jiale-bg'); // 指定周佳乐：背景渐变暖橙
+      showFeedback('已指定「' + name + '」，下一次抽奖必定抽中', false);
+      refreshCompliance(); // 指定已激活，实时刷新合规状态
     } else {
       showFeedback('名单中不存在该人，请核对输入', true);
     }
@@ -4206,7 +5128,38 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     refreshCompliance();
   });
 
-  // ---------- 二级界面：关于此程序 ----------
+  // ---------- 三级界面：分区入口 ----------
+  probGroupLink.addEventListener('click', function (e) {
+    e.stopPropagation();
+    probGroupPage.classList.add('open');
+  });
+
+  probGroupBackBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    probGroupPage.classList.remove('open');
+  });
+
+  beautyGroupLink.addEventListener('click', function (e) {
+    e.stopPropagation();
+    beautyGroupPage.classList.add('open');
+  });
+
+  beautyGroupBackBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    beautyGroupPage.classList.remove('open');
+  });
+
+  otherGroupLink.addEventListener('click', function (e) {
+    e.stopPropagation();
+    otherGroupPage.classList.add('open');
+  });
+
+  otherGroupBackBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    otherGroupPage.classList.remove('open');
+  });
+
+  // ---------- 三级界面：关于此程序 ----------
   aboutLink.addEventListener('click', function (e) {
     e.stopPropagation();
     aboutPage.classList.add('open');
@@ -4495,33 +5448,6 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
   nylonToggle.addEventListener('change', function () {
     applyNylon(nylonToggle.checked);
     saveNylonPref(nylonToggle.checked);
-  });
-
-  function openBeautifyDrawer() {
-    beautifyOverlay.classList.add('show');
-    beautifyDialog.classList.add('open');
-  }
-
-  function closeBeautifyDrawer() {
-    beautifyOverlay.classList.remove('show');
-    beautifyDialog.classList.remove('open');
-  }
-
-  beautifyLink.addEventListener('click', function (e) {
-    e.stopPropagation();
-    openBeautifyDrawer();
-  });
-
-  beautifyOverlay.addEventListener('click', function (e) {
-    e.stopPropagation();
-    closeBeautifyDrawer();
-  });
-
-  beautifyDialog.addEventListener('click', function (e) { e.stopPropagation(); });
-
-  beautifyCloseBtn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    closeBeautifyDrawer();
   });
 
   // ---------- 流光背景开关（纯视觉，不影响任何业务） ----------
@@ -5226,7 +6152,8 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
     if (count > lastFinalCount) {
       // 新一次定格：逐个模式=每定一人一次；单次模式=整体一次
       showMsg();
-      if (armedJiale) playJingle();
+      /* 流星模式的音效由流星模块在归位完成后播放，这里不再重复 */
+      if (armedJiale && !document.documentElement.classList.contains('lx-met')) playJingle();
       armedJiale = false;
       eggFired = false;
     } else if (count === 0 && lastFinalCount > 0) {
@@ -7647,6 +8574,211 @@ html[data-theme="dark"] .log-red { color: #ff9a94; }
       setTimeout(function () { try { window.__lgFx.spawnEgg(); } catch (err) {} }, 260);
     }
   }, true);
+})();
+</script>
+<script>
+/* ==========================================================
+   版本校验 / 左下角常驻信息 / 性能监控（纯追加，不影响抽取逻辑）
+   ========================================================== */
+(function () {
+  'use strict';
+  var APP_VERSION = '6.1.0';        // 本地版本（与仓库根目录 version.json 对比）
+  var PERF_KEY = 'lottery_perf_v1';
+
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------- 左下角：版本 + 版权（常驻，不可关闭） ---------- */
+  var verText = 'V ' + APP_VERSION.replace(/\.0+$/, '');
+  var footerVer = $('footerVer');
+  if (footerVer) footerVer.textContent = verText;
+  var localVerEl = $('updateLocalVer');
+  if (localVerEl) localVerEl.textContent = verText;
+
+  /* ---------- 版本校验：远程 version.json > 本地才提示 ---------- */
+  function verParts(v) {
+    return String(v).replace(/^v/i, '').trim().split('.').map(function (x) {
+      return parseInt(x, 10) || 0;
+    });
+  }
+  function isNewer(remote, local) {
+    var a = verParts(remote), b = verParts(local);
+    var n = Math.max(a.length, b.length);
+    for (var i = 0; i < n; i++) {
+      var x = a[i] || 0, y = b[i] || 0;
+      if (x > y) return true;
+      if (x < y) return false;
+    }
+    return false;
+  }
+  function checkVersion() {
+    if (!window.fetch) return;
+    fetch('version.json', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('no version.json');
+      return r.json();
+    }).then(function (j) {
+      if (!j || typeof j.version !== 'string' || !isNewer(j.version, APP_VERSION)) return;
+      var ov = $('updateOverlay');
+      if (!ov) return;
+      var ver = $('updateVer'), log = $('updateLog');
+      if (ver) ver.textContent = 'V ' + String(j.version).replace(/^v/i, '');
+      if (log) log.textContent = j.changelog ? String(j.changelog) : '本次更新包含体验与稳定性改进。';
+      ov.classList.add('show');
+    }).catch(function () { /* 离线 / file:// 打开时静默跳过 */ });
+  }
+  var updateOverlay = $('updateOverlay');
+  /* 遮罩与按钮都拦住冒泡：否则这次点击会落到应用的「点屏幕开始/停止」上 */
+  if (updateOverlay) updateOverlay.addEventListener('click', function (e) { e.stopPropagation(); });
+  var updateOkBtn = $('updateOkBtn');
+  if (updateOkBtn) updateOkBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var ov = $('updateOverlay');
+    if (ov) ov.classList.remove('show');   // 只关闭，不刷新，由用户自行刷新
+  });
+  if (document.readyState === 'complete') setTimeout(checkVersion, 500);
+  else window.addEventListener('load', function () { setTimeout(checkVersion, 500); });
+
+  /* ---------- 性能监控：FPS 实测；CPU / GPU 为轻量估算 ---------- */
+  var perfToggle = $('perfToggle');
+  var perfInfo = $('perfInfo');
+  var perf = { on: false, raf: 0, last: 0, winAt: 0, frames: 0, fps: 0, cpu: 0, gpu: 0, timer: 0 };
+
+  function perfPaint() {
+    if (!perfInfo) return;
+    perfInfo.hidden = false;
+    perfInfo.textContent = 'FPS ' + (perf.fps || '--') +
+      ' · CPU ' + Math.round(perf.cpu) + '%' +
+      ' · GPU ' + Math.round(perf.gpu) + '%';
+  }
+  function perfFrame(ts) {
+    if (!perf.on) return;
+    perf.raf = requestAnimationFrame(perfFrame);
+    if (!perf.last || !perf.winAt) {
+      perf.last = perf.winAt = ts;
+      perf.frames = 0;
+      return;
+    }
+    perf.frames++;
+    var span = ts - perf.winAt;
+    if (span >= 1000) {
+      perf.fps = Math.round(perf.frames * 1000 / span);
+      /* GPU 估算：一个统计窗内平均帧间隔超出 60Hz 预算的比例 */
+      var avg = span / perf.frames;
+      var g = Math.max(0, Math.min(100, (avg - 16.7) / 16.7 * 100));
+      perf.gpu += (g - perf.gpu) * 0.45;
+      perf.frames = 0;
+      perf.winAt = ts;
+      perfPaint();
+    }
+    perf.last = ts;
+  }
+  function cpuProbe() {
+    if (!perf.on) return;
+    var t0 = performance.now();
+    perf.timer = setTimeout(function () {
+      if (!perf.on) return;
+      /* 主线程事件循环延迟 → CPU 占用估算（0ms ≈ 空闲，22ms 以上 ≈ 满载） */
+      var lag = performance.now() - t0;
+      var v = Math.max(0, Math.min(100, (lag - 2) * 5));
+      perf.cpu += (v - perf.cpu) * 0.35;
+      perf.timer = setTimeout(cpuProbe, 500);
+    }, 0);
+  }
+  function perfStart() {
+    if (perf.on) return;
+    perf.on = true;
+    perf.last = perf.winAt = 0;
+    perf.frames = 0;
+    perf.fps = 0;
+    perfPaint();
+    if (perf.raf) cancelAnimationFrame(perf.raf);
+    perf.raf = requestAnimationFrame(perfFrame);
+    cpuProbe();
+  }
+  function perfStop() {
+    perf.on = false;
+    if (perf.raf) { cancelAnimationFrame(perf.raf); perf.raf = 0; }
+    if (perf.timer) { clearTimeout(perf.timer); perf.timer = 0; }
+    if (perfInfo) { perfInfo.hidden = true; perfInfo.textContent = ''; }
+  }
+  var perfSaved = false;
+  try { perfSaved = localStorage.getItem(PERF_KEY) === '1'; } catch (e) {}
+  if (perfToggle) {
+    perfToggle.checked = perfSaved;
+    perfToggle.addEventListener('change', function () {
+      try { localStorage.setItem(PERF_KEY, perfToggle.checked ? '1' : '0'); } catch (e) {}
+      if (perfToggle.checked) perfStart(); else perfStop();
+    });
+  }
+  if (perfSaved) requestAnimationFrame(perfStart);
+})();
+</script>
+<script>
+// ==========================================================
+// 恢复默认设置：二次确认 → 应用出厂配置 → 清引导标记 → 重载重走引导
+// 不触碰引导标记（onboarding_done_v4），恢复后不会重弹引导
+// ==========================================================
+(function () {
+  'use strict';
+  var link = document.getElementById('resetDefaultsLink');
+  var ov = document.getElementById('resetDefaultsOverlay');
+  var dialog = document.getElementById('resetDefaultsDialog');
+  var cancelBtn = document.getElementById('resetDefaultsCancel');
+  var confirmBtn = document.getElementById('resetDefaultsConfirm');
+  if (!link || !ov) return;
+
+  var toastTimer = 0;
+  function toast(text) {
+    var old = document.getElementById('resetDefaultsToast');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var el = document.createElement('div');
+    el.id = 'resetDefaultsToast';
+    el.setAttribute('role', 'status');
+    el.textContent = text;
+    document.body.appendChild(el);
+    requestAnimationFrame(function () { el.classList.add('show'); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      el.classList.remove('show');
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 420);
+    }, 1800);
+  }
+
+  function open() { ov.classList.add('show'); }
+  function close() { ov.classList.remove('show'); }
+
+  link.addEventListener('click', function (e) {
+    e.stopPropagation();
+    open();
+  });
+  link.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      open();
+    }
+  });
+
+  /* 遮罩/弹窗都拦住冒泡：这个点击不能被应用的「点屏幕开始/停止」接走 */
+  ov.addEventListener('click', function (e) {
+    e.stopPropagation();
+    close();
+  });
+  dialog.addEventListener('click', function (e) { e.stopPropagation(); });
+  cancelBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    close();
+  });
+  confirmBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    close();
+    try {
+      if (window.__lgApplyBootConfig) window.__lgApplyBootConfig(window.__lgBootDefaults);
+    } catch (err) { /* 忽略：单项失败不影响其余设置 */ }
+    /* 恢复默认 = 回到首次打开状态：清掉已看标记，重载后重新走一遍引导 */
+    try { localStorage.removeItem('onboarding_done_v4'); } catch (err) {}
+    toast('已恢复默认设置 · 即将重新进入引导');
+    setTimeout(function () { location.reload(); }, 1100);
+  });
 })();
 </script>
 </body>
