@@ -5,6 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>随机人员生成器 V6.1</title>
 <link rel="icon" href="data:,">
+<script>
+/* 版本渠道：放在样式之前执行，避免先渲染再跳转的闪动。
+   仅线上 http(s) 生效；本地 file:// / localhost 没有 /beta/ 静态目录，跳过。 */
+(function () {
+  'use strict';
+  try {
+    var saved = localStorage.getItem('rplg_channel_v1');
+    if (saved !== 'preview' && saved !== 'release') return;
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
+    var path = location.pathname;
+    var betaAt = path.indexOf('/beta/');
+    var onBeta = betaAt !== -1;
+    var base = onBeta
+      ? path.slice(0, betaAt + 1)
+      : path.slice(0, path.lastIndexOf('/') + 1);
+    if (saved === 'preview' && !onBeta) location.replace(base + 'beta/');
+    else if (saved === 'release' && onBeta) location.replace(base);
+  } catch (e) { }
+})();
+</script>
 <style>
 /* ==========================================================
    Glass Material System
@@ -3325,6 +3346,60 @@ html[data-theme="dark"] .update-log {
 .perf-row .row-label { margin-bottom: 2px; }
 .perf-row .row-desc { margin: 0; }
 
+/* ---------- 版本渠道：设置行 + 切换确认弹窗 ---------- */
+.channel-item .row-label { margin-bottom: 8px; }
+.channel-item .pick-row { margin-bottom: 7px; }
+.channel-opt { letter-spacing: .5px; }
+.channel-note {
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: .3px;
+  color: var(--ink-3);
+}
+html[data-theme="dark"] .channel-note { color: rgba(228, 236, 248, .46); }
+#channelOverlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 130;
+}
+#channelDialog {
+  width: min(320px, 86vw);
+  padding: 22px 24px 20px;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(6px) scale(.97);
+  filter: blur(6px);
+  transition:
+    opacity .2s var(--ease-out),
+    transform .24s var(--spring-soft),
+    filter .24s var(--spring-soft);
+  user-select: none;
+  -webkit-user-select: none;
+}
+#channelOverlay.show #channelDialog {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.channel-dialog-kicker {
+  margin-bottom: 7px;
+  font-size: 10px;
+  letter-spacing: 2.4px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.channel-dialog-text { margin-bottom: 2px; }
+.channel-dialog-sub {
+  margin-top: 7px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+html[data-theme="dark"] .channel-dialog-sub,
+html[data-theme="dark"] .channel-dialog-kicker { color: rgba(228, 236, 248, .48); }
+#channelConfirm { color: var(--ink-strong); font-weight: 600; }
+
 /* ---------- 恢复默认设置：确认弹窗 + 轻提示 ---------- */
 #resetDefaultsOverlay {
   display: flex;
@@ -3966,6 +4041,15 @@ html[data-theme="dark"] #resetDefaultsToast {
             </label>
           </div>
 
+          <div class="setting-item channel-item">
+            <div class="row-label">版本渠道</div>
+            <div class="pick-row" id="channelOpts" role="radiogroup" aria-label="版本渠道">
+              <button class="pick-opt channel-opt active" type="button" role="radio" aria-checked="true" data-channel="release">正式版</button>
+              <button class="pick-opt channel-opt" type="button" role="radio" aria-checked="false" data-channel="preview">Beta</button>
+            </div>
+            <div class="channel-note">测试版不稳定，仅供体验</div>
+          </div>
+
           <div id="resetDefaultsLink" class="setting-item setting-link" role="button" tabindex="0">
             <span class="link-label">恢复默认设置</span>
             <span class="link-arrow">›</span>
@@ -4105,6 +4189,18 @@ html[data-theme="dark"] #resetDefaultsToast {
       <div class="confirm-btns">
         <button id="resetDefaultsCancel" class="dialog-btn" type="button">取消</button>
         <button id="resetDefaultsConfirm" class="dialog-btn" type="button">恢复默认</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="channelOverlay" class="scrim" role="dialog" aria-modal="true" aria-labelledby="channelDialogText">
+    <div id="channelDialog" class="glass mat-modal">
+      <div class="channel-dialog-kicker">版本渠道</div>
+      <div id="channelDialogText" class="confirm-text channel-dialog-text">即将切换版本</div>
+      <div id="channelDialogSub" class="channel-dialog-sub"></div>
+      <div class="confirm-btns">
+        <button id="channelCancel" class="dialog-btn" type="button">取消</button>
+        <button id="channelConfirm" class="dialog-btn" type="button">切换并刷新</button>
       </div>
     </div>
   </div>
@@ -8779,6 +8875,104 @@ html[data-theme="dark"] #resetDefaultsToast {
     toast('已恢复默认设置 · 即将重新进入引导');
     setTimeout(function () { location.reload(); }, 1100);
   });
+})();
+</script>
+
+<script>
+/* 版本渠道切换：正式版 = 站点根目录，Beta = /beta/。
+   选择存 localStorage，下次打开由 <head> 里的脚本提前跳转。 */
+(function () {
+  'use strict';
+  var KEY = 'rplg_channel_v1';
+  var opts = document.getElementById('channelOpts');
+  var overlay = document.getElementById('channelOverlay');
+  var dialogText = document.getElementById('channelDialogText');
+  var dialogSub = document.getElementById('channelDialogSub');
+  var cancelBtn = document.getElementById('channelCancel');
+  var confirmBtn = document.getElementById('channelConfirm');
+  if (!opts || !overlay || !confirmBtn) return;
+
+  var pending = null;
+
+  function onBeta() { return location.pathname.indexOf('/beta/') !== -1; }
+  function current() { return onBeta() ? 'preview' : 'release'; }
+  function basePath() {
+    var p = location.pathname;
+    var i = p.indexOf('/beta/');
+    return i !== -1 ? p.slice(0, i + 1) : p.slice(0, p.lastIndexOf('/') + 1);
+  }
+  function target(ch) {
+    var base = basePath();
+    return ch === 'preview' ? base + 'beta/' : base;
+  }
+
+  function sync() {
+    var c = current();
+    var btns = opts.querySelectorAll('.channel-opt');
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].getAttribute('data-channel') === c;
+      btns[i].classList.toggle('active', on);
+      btns[i].setAttribute('aria-checked', on ? 'true' : 'false');
+    }
+  }
+
+  function show(ch) {
+    pending = ch;
+    var toBeta = ch === 'preview';
+    dialogText.textContent = toBeta ? '即将切换到 Beta 测试版' : '即将切换到正式版';
+    dialogSub.textContent = toBeta
+      ? '测试版不稳定，仅供体验。页面将刷新到 /beta/。'
+      : '页面将刷新到正式版。';
+    overlay.classList.add('show');
+    cancelBtn.focus();
+  }
+
+  function hide() {
+    pending = null;
+    overlay.classList.remove('show');
+    var active = opts.querySelector('.channel-opt.active');
+    if (active) {
+      try { active.focus({ preventScroll: true }); }
+      catch (err) { active.focus(); }
+    }
+  }
+
+  opts.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.channel-opt') : null;
+    if (!btn) return;
+    var ch = btn.getAttribute('data-channel');
+    if (!ch || ch === current()) return;
+    show(ch);
+  });
+
+  cancelBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    hide();
+  });
+
+  overlay.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (e.target === overlay) hide();
+  });
+
+  confirmBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!pending) return;
+    var ch = pending;
+    try { localStorage.setItem(KEY, ch); } catch (err) {}
+    /* file:// 没有 /beta/ 静态目录：只记住选择，避免跳到不存在的路径 */
+    if (location.protocol === 'file:') { hide(); sync(); return; }
+    location.assign(target(ch));
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay.classList.contains('show')) {
+      e.stopPropagation();
+      hide();
+    }
+  });
+
+  sync();
 })();
 </script>
 </body>

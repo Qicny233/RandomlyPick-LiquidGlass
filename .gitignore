@@ -1,0 +1,15 @@
+# 本地调试探针与临时文件
+.edge-probe/
+_lx_*.js
+_lx_*.png
+_perf_tmp.js
+_serve.js
+
+# 本地备份与历史副本
+backup.html
+历史版本/
+*.lnk
+
+# 未纳入主程序的本地依赖/示例工程
+liquid-glass-webgl-2.0.0/
+分支/three.module.min.js
