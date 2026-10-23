@@ -21,9 +21,10 @@
     var base = onBeta
       ? path.slice(0, betaAt + 1)
       : path.slice(0, path.lastIndexOf('/') + 1);
-    /* 只做「正式版入口 → Beta」的自动跳转；直接访问 /beta/ 时保留 Beta，
-       允许用户随时手动回测试版。 */
+    /* 读取上次选择：正式版入口 ↔ /beta/ 双向自动跳转。
+       正式版已有渠道设置，可随时切回，不会被锁死在 Beta。 */
     if (saved === 'preview' && !onBeta) location.replace(base + 'beta/');
+    else if (saved === 'release' && onBeta) location.replace(base);
   } catch (e) { /* 存储不可用时按当前页面继续 */ }
 })();
 </script>
