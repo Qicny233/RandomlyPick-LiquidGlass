@@ -1,0 +1,74 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: release
+          fetch-depth: 1
+
+      - name: Checkout beta (optional)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: beta
+          path: beta
+          fetch-depth: 1
+
+      # A Pages deployment replaces the whole site, so every run publishes
+      # both entries: main at / and beta at /beta/. Beta files never touch
+      # the release root.
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          mkdir -p _site/beta
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.gitignore' \
+            release/ _site/
+          if [ -f beta/index.html ]; then
+            rsync -a \
+              --exclude='.git' \
+              --exclude='.github' \
+              --exclude='.gitignore' \
+              --exclude='分支' \
+              beta/ _site/beta/
+          else
+            echo "::warning::Beta branch unavailable; deploying release only."
+            rmdir _site/beta 2>/dev/null || true
+          fi
+          test -f _site/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

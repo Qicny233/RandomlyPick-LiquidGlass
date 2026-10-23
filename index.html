@@ -3,8 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V6.1</title>
+<title>随机人员生成器 V7 Preview</title>
 <link rel="icon" href="data:,">
+<script>
+/* 版本渠道：尽早读取上次选择并跳转，避免页面先渲染再闪跳。
+   /beta/ 为测试版，站点根路径为正式版；本地 file:// 调试不跳转。 */
+(function () {
+  'use strict';
+  try {
+    var saved = localStorage.getItem('rplg_channel_v1');
+    if (saved !== 'preview' && saved !== 'release') return;
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
+    var path = location.pathname;
+    var betaAt = path.indexOf('/beta/');
+    var onBeta = betaAt !== -1;
+    var base = onBeta
+      ? path.slice(0, betaAt + 1)
+      : path.slice(0, path.lastIndexOf('/') + 1);
+    /* 只做「正式版入口 → Beta」的自动跳转；直接访问 /beta/ 时保留 Beta，
+       允许用户随时手动回测试版。 */
+    if (saved === 'preview' && !onBeta) location.replace(base + 'beta/');
+  } catch (e) { /* 存储不可用时按当前页面继续 */ }
+})();
+</script>
 <style>
 /* ==========================================================
    Glass Material System
@@ -3325,6 +3347,61 @@ html[data-theme="dark"] .update-log {
 .perf-row .row-label { margin-bottom: 2px; }
 .perf-row .row-desc { margin: 0; }
 
+/* ---------- 版本渠道：柔和分段玻璃控件 ---------- */
+.channel-item .row-label { margin-bottom: 8px; }
+.channel-item .pick-row { margin-bottom: 7px; }
+.channel-opt { letter-spacing: .5px; }
+.channel-note {
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: .3px;
+  color: var(--ink-3);
+}
+html[data-theme="dark"] .channel-note { color: rgba(228, 236, 248, .46); }
+
+#channelOverlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 130;
+}
+#channelDialog {
+  width: min(320px, 86vw);
+  padding: 22px 24px 20px;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(6px) scale(.97);
+  filter: blur(6px);
+  transition:
+    opacity .2s var(--ease-out),
+    transform .24s var(--spring-soft),
+    filter .24s var(--spring-soft);
+  user-select: none;
+  -webkit-user-select: none;
+}
+#channelOverlay.show #channelDialog {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.channel-dialog-kicker {
+  margin-bottom: 7px;
+  font-size: 10px;
+  letter-spacing: 2.4px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.channel-dialog-text { margin-bottom: 2px; }
+.channel-dialog-sub {
+  margin-top: 7px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+html[data-theme="dark"] .channel-dialog-sub,
+html[data-theme="dark"] .channel-dialog-kicker { color: rgba(228, 236, 248, .48); }
+#channelConfirm { color: var(--ink-strong); font-weight: 600; }
+
 /* ---------- 恢复默认设置：确认弹窗 + 轻提示 ---------- */
 #resetDefaultsOverlay {
   display: flex;
@@ -3415,7 +3492,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
     <div class="ob-card glass mat-modal">
       <div class="ob-top">
-        <div class="ob-brand">随机人员生成器 <b>V6.1</b></div>
+        <div class="ob-brand">随机人员生成器 <b>V7 Preview</b></div>
         <div class="ob-dots" role="tablist" aria-label="引导页切换">
           <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
           <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
@@ -3789,7 +3866,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V6.1</div>
+    <div id="title">随机人员生成器 V7 Preview</div>
     <button id="complianceDot" type="button" aria-label="合规状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
   </div>
@@ -3966,6 +4043,15 @@ html[data-theme="dark"] #resetDefaultsToast {
             </label>
           </div>
 
+          <div class="setting-item channel-item">
+            <div class="row-label">版本渠道</div>
+            <div class="pick-row" id="channelOpts" role="radiogroup" aria-label="版本渠道">
+              <button class="pick-opt channel-opt active" type="button" role="radio" aria-checked="true" data-channel="release">正式版</button>
+              <button class="pick-opt channel-opt" type="button" role="radio" aria-checked="false" data-channel="preview">Beta</button>
+            </div>
+            <div class="channel-note">测试版不稳定，仅供体验</div>
+          </div>
+
           <div id="resetDefaultsLink" class="setting-item setting-link" role="button" tabindex="0">
             <span class="link-label">恢复默认设置</span>
             <span class="link-arrow">›</span>
@@ -3985,8 +4071,16 @@ html[data-theme="dark"] #resetDefaultsToast {
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V6.1 <span class="pro-gold">Pro</span>
+      版本号：V7 Preview
       更新日志：
+      V7 Preview
+      · 3D 赛车抽取全面升级：流线型超跑、夜赛城市、路面随机名单、刹车停名、镜头转场与立牌揭晓
+      · 新增左下速度表、挡位与 N₂O 氮气条；氮气加速、碾过名字回充、刹停抽选
+      · 新增低音量清脆程序化音效：引擎、氮气嘶鸣、刹车、命中与揭晓；右上角可一键静音与调音量
+      · 赛车界面文字与按钮改为低饱和柔和配色，右上角实时显示 FPS
+      · 修复路面名字镜像反转、停车后名字被车身挡住；中奖名字会滑到车头前方
+      · 主界面连续点击三次「人数及抽取」可直接进入赛车
+      · 新增版本渠道：设置 → 其他功能可在正式版与 Beta 测试版之间切换
       V6.1 <span class="pro-gold">Pro</span>
       · 重做首次启动引导：四页液态玻璃轮播，覆盖欢迎、默认设置、功能特色与佳乐庆典
       · 欢迎页多语言逐字打出，每种语言停留约 3.5 秒后模糊淡出并平滑切换
@@ -4109,6 +4203,19 @@ html[data-theme="dark"] #resetDefaultsToast {
     </div>
   </div>
 
+  <!-- 版本渠道切换提示（切换即刷新页面） -->
+  <div id="channelOverlay" class="scrim" role="dialog" aria-modal="true" aria-labelledby="channelDialogText">
+    <div id="channelDialog" class="glass mat-modal">
+      <div class="channel-dialog-kicker">版本渠道</div>
+      <div id="channelDialogText" class="confirm-text channel-dialog-text">即将切换版本</div>
+      <div id="channelDialogSub" class="channel-dialog-sub"></div>
+      <div class="confirm-btns">
+        <button id="channelCancel" class="dialog-btn" type="button">取消</button>
+        <button id="channelConfirm" class="dialog-btn" type="button">切换并刷新</button>
+      </div>
+    </div>
+  </div>
+
   <div id="complianceOverlay" class="scrim">
     <div id="complianceDialog" class="glass mat-modal">
       <div class="drawer-header">
@@ -4125,7 +4232,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="updateOverlay" class="scrim">
     <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <div id="updateTitle" class="update-title">检测到新版本</div>
-      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V 6.1</span></div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V7 Preview</span></div>
       <div id="updateLog" class="update-log"></div>
       <div class="confirm-btns">
         <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
@@ -8582,13 +8689,14 @@ html[data-theme="dark"] #resetDefaultsToast {
    ========================================================== */
 (function () {
   'use strict';
-  var APP_VERSION = '6.1.0';        // 本地版本（与仓库根目录 version.json 对比）
+  var APP_VERSION = '7.0.0-preview';  // 本地版本（与仓库根目录 version.json 对比）
+  var DISPLAY_VERSION = 'V7 Preview';
   var PERF_KEY = 'lottery_perf_v1';
 
   function $(id) { return document.getElementById(id); }
 
   /* ---------- 左下角：版本 + 版权（常驻，不可关闭） ---------- */
-  var verText = 'V ' + APP_VERSION.replace(/\.0+$/, '');
+  var verText = DISPLAY_VERSION;
   var footerVer = $('footerVer');
   if (footerVer) footerVer.textContent = verText;
   var localVerEl = $('updateLocalVer');
@@ -8779,6 +8887,400 @@ html[data-theme="dark"] #resetDefaultsToast {
     toast('已恢复默认设置 · 即将重新进入引导');
     setTimeout(function () { location.reload(); }, 1100);
   });
+})();
+</script>
+
+<!-- ============================================================
+     隐藏 3D 赛车抽取入口（additive，不改动任何原有逻辑）
+     桌面：鼠标长按空白 3 秒（无提示）→ 确认窗 → 单击「进入」→ 赛车页推入
+     触屏：五指在屏幕右半部从右向左滑 → 直接丝滑推入（不弹确认）
+     快捷：连续点击三次右上角「人数及抽取」→ 直接进入
+     ============================================================ -->
+<style>
+  #raceStage{
+    position:fixed; inset:0; z-index:99999;
+    transform:translateX(100%);
+    visibility:hidden; pointer-events:none;
+    background:#03060c; overflow:hidden;
+    box-shadow:-20px 0 70px rgba(25,35,55,.20);
+  }
+  #raceStage.live{ visibility:visible; pointer-events:auto; }
+  #raceFrame{ width:100%; height:100%; border:0; display:block; background:#03060c; }
+  body.race-ready{ transition:transform .64s cubic-bezier(.22,.85,.3,1); will-change:transform; }
+  body.race-open{ transform:translateX(-100%); }
+  /* 进入赛车页后暂停主界面的 CSS 动画，避免后台抢资源；
+     推屏是 body 的 transition（不匹配后代选择器）不受影响，iframe 内是独立文档也不受影响 */
+  body.race-open *{ animation-play-state:paused !important; }
+
+  /* 长按 3 秒确认窗：完整的玻璃底板 + 入场动画 */
+  #raceConfirm{ z-index:100002; display:flex; align-items:center; justify-content:center; }
+  #raceConfirmDialog{
+    width:min(320px, 86vw);
+    padding:22px 24px 20px;
+    text-align:center;
+    opacity:0; transform:translateY(6px) scale(.97); filter:blur(6px);
+    transition: opacity .2s var(--ease-out), transform .24s var(--spring-soft), filter .24s var(--spring-soft);
+    user-select:none; -webkit-user-select:none;
+  }
+  #raceConfirm.show #raceConfirmDialog{ opacity:1; transform:none; filter:none; }
+  #raceConfirm .confirm-text{ text-align:center; }
+  #raceConfirm .confirm-sub{ margin-top:7px; font-size:11.5px; line-height:1.6; letter-spacing:.5px; color:var(--ink-3); }
+
+  /* 二次确认：单击「进入」即可 */
+  #raceEnter{
+    color:var(--ink-strong); font-weight:600;
+  }
+</style>
+
+<div id="raceStage" aria-hidden="true">
+  <iframe id="raceFrame" title="3D 赛车抽取" src="about:blank" loading="lazy"></iframe>
+</div>
+
+<div id="raceConfirm" class="scrim">
+  <div id="raceConfirmDialog" class="glass mat-modal">
+    <div class="confirm-text">进入隐藏的 3D 赛车抽取？</div>
+    <div class="confirm-sub">点击「进入」即可开启</div>
+    <div class="confirm-btns">
+      <button id="raceCancel" class="dialog-btn" type="button">取消</button>
+      <button id="raceEnter" class="dialog-btn" type="button">进入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  if (window.__raceGate) return;
+  window.__raceGate = true;
+
+  var HOLD_MS = 3000;
+  var SWIPE_FINGERS = 5;
+  var SWIPE_X = 70;
+  var MOVE_TOL = 12;
+
+  var body = document.body;
+  var stage = document.getElementById('raceStage');
+  var frame = document.getElementById('raceFrame');
+  var confirmEl = document.getElementById('raceConfirm');
+
+  var opened = false;
+  var holding = false;
+  var holdTimer = null;
+  var sx = 0, sy = 0;
+
+  /* 触屏五指状态 */
+  var t5 = false, tFired = false, tStartX = 0, tStartY = 0;
+
+  var INTERACTIVE = 'button,input,label,a,select,textarea,.scrim,.overlay,.top-btn,#pickPop,#speedPop,#themePop,#resetBtn,#onboarding,.pick-opt,.theme-opt,.setting-link,.suggest-item';
+
+  /* ---------- 工具判定 ---------- */
+  function onboardingVisible() {
+    var ob = document.getElementById('onboarding');
+    return !!(ob && ob.classList.contains('ready') && !ob.classList.contains('leaving'));
+  }
+  function anyScrim() {
+    var scrims = document.querySelectorAll('.scrim.show');
+    return scrims.length > 0;
+  }
+  function isInteractive(t) {
+    return !!(t && t.closest && t.closest(INTERACTIVE));
+  }
+  function gateBlocked() {
+    return opened || onboardingVisible() || anyScrim();
+  }
+
+  /* 与主应用同源的名单读取：从内联 var NAMES 提取 name */
+  function extractNames() {
+    var names = [];
+    try {
+      var scripts = document.getElementsByTagName('script');
+      for (var i = 0; i < scripts.length; i++) {
+        var t = scripts[i].textContent || '';
+        if (t.indexOf('var NAMES') === -1) continue;
+        var re = /name:[ ]*"([^"]+)"/g, m;
+        while ((m = re.exec(t))) names.push(m[1]);
+        if (names.length) break;
+      }
+    } catch (e) {}
+    return names;
+  }
+
+  /* ---------- 推屏转场 ---------- */
+  function openRace() {
+    if (opened) return;
+    opened = true;
+    cancelHold();
+    hideConfirm();
+    try { sessionStorage.setItem('race_names_v1', JSON.stringify(extractNames())); } catch (e) {}
+    stage.classList.add('live');
+    if (!frame.getAttribute('data-srcset')) {
+      frame.src = 'race.html';
+      frame.setAttribute('data-srcset', '1');
+    }
+    body.classList.add('race-ready');
+    void body.offsetWidth;
+    body.classList.add('race-open');
+  }
+
+  function closeRace() {
+    if (!opened) return;
+    hideConfirm();
+    body.classList.remove('race-open');
+    var finished = false;
+    function done() {
+      if (finished) return;
+      finished = true;
+      body.classList.remove('race-ready');
+      stage.classList.remove('live');
+      try { frame.src = 'about:blank'; frame.removeAttribute('data-srcset'); } catch (e) {}
+      opened = false;
+    }
+    function onEnd(ev) {
+      if (ev.propertyName === 'transform' && ev.target === body) {
+        body.removeEventListener('transitionend', onEnd);
+        done();
+      }
+    }
+    body.addEventListener('transitionend', onEnd);
+    setTimeout(done, 820);   // 兜底，防止 transitionend 被打断
+  }
+
+  /* ---------- 确认窗 ---------- */
+  function showConfirm() {
+    if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }
+    confirmArmed = true;
+    confirmEl.classList.add('show');
+  }
+  function hideConfirm() {
+    confirmEl.classList.remove('show');
+    confirmArmed = false;
+  }
+
+  /* 二次确认：单击「进入」即可开启 */
+  var enterBtn = document.getElementById('raceEnter');
+  enterBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    hideConfirm();
+    openRace();
+  });
+  document.getElementById('raceCancel').addEventListener('click', function (e) {
+    e.stopPropagation();
+    hideConfirm();
+  });
+  /* 弹窗显示期间：冒泡阶段阻止穿透到 document（避免误触发主界面抽取），内部按钮照常可点；点背景=取消 */
+  var confirmArmed = false;
+  confirmEl.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (e.target === confirmEl) hideConfirm();
+  }, false);
+  /* 长按 5 秒弹窗时用户手指仍按着：松手那一下 click 的命中目标可能是弹窗的祖先（body），
+     不会经过 confirmEl。在弹窗出现后、用户产生新的 pointerdown 之前，吞掉这一次 click。 */
+  /* ---------- 快捷入口：连续点击三次「人数及抽取」直接进赛车 ---------- */
+  var pickTaps = 0, pickTapTimer = null;
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('#pickBtn') : null;
+    if (!btn || gateBlocked()) return;
+    pickTaps++;
+    clearTimeout(pickTapTimer);
+    if (pickTaps >= 3) {
+      pickTaps = 0;
+      /* 第三下拦住主界面的展开面板逻辑，避免留在后台 */
+      e.preventDefault();
+      e.stopPropagation();
+      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (err) {} }
+      openRace();
+      return;
+    }
+    pickTapTimer = setTimeout(function () { pickTaps = 0; }, 900);
+  }, true);
+
+  document.addEventListener('pointerdown', function () {
+    if (confirmEl.classList.contains('show')) confirmArmed = false;
+  }, true);
+  document.addEventListener('click', function (e) {
+    /* 只吞指针产生的 click（长按松手那一下）；键盘激活 detail 为 0，不拦 */
+    if (confirmEl.classList.contains('show') && confirmArmed && e.detail > 0) {
+      e.stopPropagation();
+      e.preventDefault();
+      confirmArmed = false;
+    }
+  }, true);
+
+  /* ---------- 桌面：无提示长按 3 秒 → 确认窗；单击「进入」开启 ---------- */
+  function startHold() {
+    holding = true;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(function () {
+      if (!holding) return;
+      holding = false;
+      clearTimeout(holdTimer);
+      showConfirm();
+    }, HOLD_MS);
+  }
+  function cancelHold() {
+    if (!holding) return;
+    holding = false;
+    clearTimeout(holdTimer);
+  }
+
+  document.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;   // 仅鼠标主键
+    if (e.clientY < 88) return;                                 // 顶部安全区
+    if (gateBlocked()) return;
+    if (isInteractive(e.target)) return;
+    sx = e.clientX; sy = e.clientY;
+    startHold(e.clientX, e.clientY);
+  }, true);
+  document.addEventListener('pointermove', function (e) {
+    if (!holding) return;
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > MOVE_TOL) cancelHold();
+  }, true);
+  document.addEventListener('pointerup', cancelHold, true);
+  document.addEventListener('pointercancel', cancelHold, true);
+  window.addEventListener('blur', cancelHold);
+
+  /* ---------- 触屏：五指从右向左滑，直接丝滑进入 ---------- */
+  function avgTouch(e) {
+    var x = 0, y = 0, n = e.touches.length;
+    for (var i = 0; i < n; i++) { x += e.touches[i].clientX; y += e.touches[i].clientY; }
+    return { x: x / n, y: y / n };
+  }
+  document.addEventListener('touchstart', function (e) {
+    if (gateBlocked()) { t5 = false; return; }
+    if (e.touches.length === SWIPE_FINGERS) {
+      var p = avgTouch(e);
+      if (p.x > window.innerWidth * 0.45) {   // 起手在屏幕右半部
+        t5 = true; tFired = false;
+        tStartX = p.x; tStartY = p.y;
+      } else { t5 = false; }
+    } else { t5 = false; }
+  }, { passive: true, capture: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!t5) return;
+    if (e.touches.length !== SWIPE_FINGERS) { t5 = false; return; }
+    var p = avgTouch(e);
+    var dx = tStartX - p.x, dy = p.y - tStartY;
+    if (Math.abs(dx) > 10 && Math.abs(dx) >= Math.abs(dy)) e.preventDefault();  // 水平主导时阻止页面默认手势
+    if (dx > SWIPE_X && Math.abs(dx) > Math.abs(dy) && !tFired) {
+      tFired = true;
+      e.preventDefault();
+      openRace();
+    }
+  }, { passive: false, capture: true });
+  function touchEnd(e) {
+    if (e.touches.length < SWIPE_FINGERS) t5 = false;
+  }
+  document.addEventListener('touchend', touchEnd, { passive: true, capture: true });
+  document.addEventListener('touchcancel', touchEnd, { passive: true, capture: true });
+
+  /* ---------- 赛车页通信：加载后索取名单、返回 ---------- */
+  window.addEventListener('message', function (e) {
+    /* file:// 下若主页面 origin 是 "file://"、iframe 是 "null"，严格比对 origin 会丢消息；
+       以消息来源窗口为准，并只接受赛车 iframe 的消息 */
+    if (!e.data || e.source !== frame.contentWindow) return;
+    if (e.data.type === 'race-ready') {
+      try { frame.contentWindow.postMessage({ type: 'race-names', names: extractNames() }, '*'); } catch (err) {}
+    }
+    if (e.data.type === 'race-close') closeRace();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && opened) {
+      if (confirmEl.classList.contains('show')) hideConfirm();
+      else closeRace();
+    }
+  });
+})();
+</script>
+
+<script>
+/* ==========================================================
+   版本渠道：正式版（站点根目录） / Beta（/beta/ 子路径）
+   切换只做整页跳转，不做跨目录无刷新加载
+   ========================================================== */
+(function () {
+  'use strict';
+  var KEY = 'rplg_channel_v1';
+  var opts = document.getElementById('channelOpts');
+  var overlay = document.getElementById('channelOverlay');
+  var dialogText = document.getElementById('channelDialogText');
+  var dialogSub = document.getElementById('channelDialogSub');
+  var cancelBtn = document.getElementById('channelCancel');
+  var confirmBtn = document.getElementById('channelConfirm');
+  if (!opts || !overlay || !confirmBtn) return;
+
+  var pending = null;
+
+  function onBeta() { return location.pathname.indexOf('/beta/') !== -1; }
+  function current() { return onBeta() ? 'preview' : 'release'; }
+  function basePath() {
+    var p = location.pathname;
+    var i = p.indexOf('/beta/');
+    return i !== -1 ? p.slice(0, i + 1) : p.slice(0, p.lastIndexOf('/') + 1);
+  }
+  function target(ch) {
+    var base = basePath();
+    return ch === 'preview' ? base + 'beta/' : base;
+  }
+  function sync() {
+    var c = current();
+    var btns = opts.querySelectorAll('.channel-opt');
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].getAttribute('data-channel') === c;
+      btns[i].classList.toggle('active', on);
+      btns[i].setAttribute('aria-checked', on ? 'true' : 'false');
+    }
+  }
+  function show(ch) {
+    pending = ch;
+    var toBeta = ch === 'preview';
+    dialogText.textContent = toBeta ? '即将切换到 Beta 测试版' : '即将切换到正式版';
+    dialogSub.textContent = toBeta
+      ? '测试版不稳定，仅供体验。页面将刷新到 /beta/。'
+      : '页面将刷新到正式版。';
+    overlay.classList.add('show');
+    cancelBtn.focus();
+  }
+  function hide() {
+    pending = null;
+    overlay.classList.remove('show');
+    var active = opts.querySelector('.channel-opt.active');
+    if (active) {
+      try { active.focus({ preventScroll: true }); }
+      catch (err) { active.focus(); }
+    }
+  }
+
+  opts.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.channel-opt') : null;
+    if (!btn) return;
+    var ch = btn.getAttribute('data-channel');
+    if (!ch || ch === current()) return;
+    show(ch);
+  });
+
+  cancelBtn.addEventListener('click', function (e) { e.stopPropagation(); hide(); });
+  overlay.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (e.target === overlay) hide();
+  });
+  confirmBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!pending) return;
+    var ch = pending;
+    try { localStorage.setItem(KEY, ch); } catch (err) {}
+    /* file:// 没有 /beta/ 静态目录：只记住选择，避免跳到不存在的路径 */
+    if (location.protocol === 'file:') { hide(); sync(); return; }
+    location.assign(target(ch));
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay.classList.contains('show')) {
+      e.stopPropagation();
+      hide();
+    }
+  });
+
+  sync();
 })();
 </script>
 </body>
