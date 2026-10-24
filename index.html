@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V7 Preview</title>
+<title>随机人员生成器 V7</title>
 <link rel="icon" href="data:,">
 <script>
 /* 版本渠道：尽早读取上次选择并跳转，避免页面先渲染再闪跳。
@@ -3493,7 +3493,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
     <div class="ob-card glass mat-modal">
       <div class="ob-top">
-        <div class="ob-brand">随机人员生成器 <b>V7 Preview</b></div>
+        <div class="ob-brand">随机人员生成器 <b>V7</b></div>
         <div class="ob-dots" role="tablist" aria-label="引导页切换">
           <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
           <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
@@ -3867,7 +3867,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V7 Preview</div>
+    <div id="title">随机人员生成器 V7</div>
     <button id="complianceDot" type="button" aria-label="合规状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
   </div>
@@ -4072,9 +4072,9 @@ html[data-theme="dark"] #resetDefaultsToast {
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V7 Preview
+      版本号：V7
       更新日志：
-      V7 Preview
+      V7
       · 3D 赛车抽取全面升级：流线型超跑、夜赛城市、路面随机名单、刹车停名、镜头转场与立牌揭晓
       · 新增左下速度表、挡位与 N₂O 氮气条；氮气加速、碾过名字回充、刹停抽选
       · 新增低音量清脆程序化音效：引擎、氮气嘶鸣、刹车、命中与揭晓；右上角可一键静音与调音量
@@ -4233,7 +4233,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="updateOverlay" class="scrim">
     <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <div id="updateTitle" class="update-title">检测到新版本</div>
-      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V7 Preview</span></div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V7</span></div>
       <div id="updateLog" class="update-log"></div>
       <div class="confirm-btns">
         <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
@@ -4243,7 +4243,7 @@ html[data-theme="dark"] #resetDefaultsToast {
 
   <!-- 左下角常驻：版本 + 版权（不可关闭）；性能信息由设置项控制 -->
   <div id="appFooter" aria-hidden="true">
-    <span class="af-ver" id="footerVer">V 6.1</span>
+    <span class="af-ver" id="footerVer">V 7</span>
     <span class="af-sep">|</span>
     <span class="af-copy">Qicny © All Rights Reserved</span>
     <span id="perfInfo" hidden></span>
@@ -4429,7 +4429,18 @@ html[data-theme="dark"] #resetDefaultsToast {
   function loadHistory() {
     try {
       var arr = JSON.parse(localStorage.getItem(HISTORY_KEY));
-      return Array.isArray(arr) ? arr : [];
+      if (!Array.isArray(arr)) return [];
+      /* 逐条校验：正式版与 Beta 共用同一个 origin 的 localStorage，
+         任何一条脏数据都丢弃，不让两版的数据结构差异把历史面板打崩。 */
+      var out = [];
+      for (var i = 0; i < arr.length && out.length < MAX_HISTORY; i++) {
+        var it = arr[i];
+        if (!it || typeof it !== 'object') continue;
+        if (typeof it.name !== 'string' || !it.name) continue;
+        if (typeof it.t !== 'number' || !isFinite(it.t)) continue;
+        out.push({ t: it.t, name: it.name });
+      }
+      return out;
     } catch (e) { return []; }
   }
 
@@ -8690,8 +8701,8 @@ html[data-theme="dark"] #resetDefaultsToast {
    ========================================================== */
 (function () {
   'use strict';
-  var APP_VERSION = '7.0.0-preview';  // 本地版本（与仓库根目录 version.json 对比）
-  var DISPLAY_VERSION = 'V7 Preview';
+  var APP_VERSION = '7.0.0';  // 本地版本（与仓库根目录 version.json 对比）
+  var DISPLAY_VERSION = 'V7';
   var PERF_KEY = 'lottery_perf_v1';
 
   function $(id) { return document.getElementById(id); }
