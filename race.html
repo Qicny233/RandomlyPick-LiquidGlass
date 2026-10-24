@@ -560,6 +560,66 @@ button:focus-visible{ outline:2px solid rgba(140,214,230,.65); outline-offset:3p
   *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; }
   .speedlines{ display:none; }
 }
+
+/* ---------- 佳乐庆典 ---------- */
+.hud-brand, .hud-meta{ pointer-events:auto; }
+.jiale-glow{
+  z-index:2; opacity:0; pointer-events:none;
+  background:
+    radial-gradient(60% 50% at 50% 42%, rgba(255,170,90,.22), rgba(255,170,90,0) 70%),
+    radial-gradient(45% 40% at 18% 60%, rgba(255,90,150,.16), rgba(255,90,150,0) 72%),
+    radial-gradient(50% 45% at 82% 58%, rgba(120,110,255,.14), rgba(120,110,255,0) 72%);
+  mix-blend-mode:screen;
+  transition:opacity .45s ease;
+}
+.jiale-badge{
+  display:none; align-items:center; gap:5px;
+  margin-left:4px; padding:3px 8px 4px;
+  border-radius:999px;
+  font-size:8px; letter-spacing:1.4px; font-weight:700;
+  color:#ffe7c4;
+  background:linear-gradient(135deg, rgba(255,140,90,.24), rgba(255,90,150,.18));
+  border:1px solid rgba(255,190,130,.28);
+  box-shadow:0 0 18px rgba(255,140,90,.18), 0 1px 0 rgba(255,255,255,.10) inset;
+  white-space:nowrap;
+}
+body.jiale-mode .jiale-badge{ display:inline-flex; }
+body.jiale-mode .hud-brand .brand-dot{
+  background:#ffb36b;
+  box-shadow:0 0 10px rgba(255,160,90,.7), 0 0 24px rgba(255,120,140,.35);
+}
+body.jiale-mode .hud-brand{ border-color:rgba(255,180,120,.22); }
+body.jiale-mode .speedo{ border-color:rgba(255,180,120,.18); }
+body.jiale-mode .result-dock{
+  border-color:rgba(255,190,130,.30);
+  background:
+    radial-gradient(120% 140% at 12% 0%, rgba(255,150,90,.16), rgba(255,150,90,0) 54%),
+    linear-gradient(160deg, rgba(38,20,24,.92), rgba(18,8,18,.90));
+}
+body.jiale-mode .result-name{ color:#ffe9cf; text-shadow:0 0 24px rgba(255,160,90,.28); }
+body.jiale-mode .result-kicker{ color:#d8a77a; }
+body.jiale-mode .result-sub{ color:#b58d86; }
+.start-hint.jiale-secret{
+  opacity:.34; font-size:8px; letter-spacing:2px; color:#8d7f8f;
+  margin-top:2px;
+}
+.jiale-toast{
+  position:fixed; left:50%; top:calc(74px + env(safe-area-inset-top)); z-index:60;
+  transform:translate(-50%, -6px); opacity:0;
+  padding:8px 16px; border-radius:999px;
+  font-size:11px; letter-spacing:2px; color:#ffe9cf;
+  background:linear-gradient(135deg, rgba(80,35,30,.80), rgba(50,20,40,.76));
+  border:1px solid rgba(255,190,130,.24);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  box-shadow:0 12px 34px rgba(0,0,0,.32), 0 0 28px rgba(255,140,80,.12);
+  pointer-events:none; white-space:nowrap;
+  transition:opacity .3s ease, transform .35s var(--spring);
+}
+.jiale-toast.show{ opacity:1; transform:translate(-50%, 0); }
+@media (max-width: 760px){
+  .jiale-badge{ display:none !important; }
+  .jiale-toast{ top:calc(64px + env(safe-area-inset-top)); font-size:10px; }
+}
 </style>
 </head>
 <body data-phase="idle">
@@ -568,10 +628,11 @@ button:focus-visible{ outline:2px solid rgba(140,214,230,.65); outline-offset:3p
   <div class="fx vignette"></div>
   <div id="speedlines" class="fx speedlines"></div>
   <div id="boostfx" class="fx boostfx"></div>
+  <div id="jialeGlow" class="fx jiale-glow" aria-hidden="true"></div>
 
   <header class="hud-top">
     <button id="backBtn" class="hud-back" type="button" aria-label="返回主界面"><span class="chev">‹</span> 返回</button>
-    <div class="hud-brand"><span class="brand-dot"></span><b>RANDOMLYPICK</b><em>STREET CIRCUIT</em></div>
+    <div class="hud-brand"><span class="brand-dot"></span><b>RANDOMLYPICK</b><em>STREET CIRCUIT</em><span id="jialeBadge" class="jiale-badge">佳乐庆典</span></div>
     <div class="hud-meta">
       <span class="meta-item meta-cand"><b id="candidateCount">—</b><span>候选</span></span>
       <i class="meta-sep" aria-hidden="true"></i>
@@ -600,6 +661,7 @@ button:focus-visible{ outline:2px solid rgba(140,214,230,.65); outline-offset:3p
       <kbd>SPACE</kbd><span>刹车</span><i></i><kbd>SHIFT</kbd><span>氮气</span><i></i><span>长按 N₂O 加速</span>
     </div>
     <div class="start-hint touch-hint">按住右下 N₂O 加速 · 点刹车抽选</div>
+    <div class="start-hint jiale-secret">三击顶部 · 佳乐庆典</div>
   </section>
 
   <aside id="speedo" class="speedo" aria-label="速度表">
@@ -669,6 +731,8 @@ button:focus-visible{ outline:2px solid rgba(140,214,230,.65); outline-offset:3p
     </div>
   </div>
 
+  <div id="jialeToast" class="jiale-toast" role="status" aria-live="polite"></div>
+
   <div id="fader" class="fader"></div>
 
   <div id="loading" class="loading">
@@ -711,6 +775,11 @@ const resultDock = $('resultDock'), resultName = $('resultName');
 const fader = $('fader'), candidateCount = $('candidateCount'), fpsValue = $('fpsValue');
 const speedlines = $('speedlines'), boostfx = $('boostfx'), driveHint = $('driveHint');
 const startPanel = $('startPanel');
+const jialeGlowEl = $('jialeGlow'), jialeToastEl = $('jialeToast');
+const resultKickerEl = resultDock ? resultDock.querySelector('.result-kicker') : null;
+const resultSubEl = resultDock ? resultDock.querySelector('.result-sub') : null;
+const RESULT_KICKER_DEFAULT = resultKickerEl ? resultKickerEl.textContent : '';
+const RESULT_SUB_DEFAULT = resultSubEl ? resultSubEl.textContent : '';
 
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const IS_MOBILE = isTouch || Math.min(innerWidth, innerHeight) < 700;
@@ -769,6 +838,37 @@ let glowTex = null, envRT = null;
 let skyTex = null;
 let cityLampPoints = null;
 let revealGlowMat = null;
+
+/* 场景增强：月光 / 霓虹招牌 / 灯门 / 尘埃 / 头灯光锥 */
+let hemiLight = null;
+let moonSprite = null;
+let neonSignMats = [];
+let gateNeonMats = [];
+let dustPoints = null, dustPos = null, dustSeed = null;
+let underGlowMesh = null;
+let headlightCones = [];
+let roadMarkMeshes = [];
+
+/* 佳乐庆典 */
+let jialeMode = false;
+let jialeMix = 0, jialeMixTarget = 0;
+let jialeDecor = null, jialeFanGroup = null;
+let jialeFans = [];
+let jialeSignFan = null;
+let jialeConfetti = null;
+let jialeLanterns = [];
+let jialeSpotlights = [];
+let jialeFireworkT = 0, jialeConfettiT = 0;
+let jialeToastTimer = null;
+let topClickCount = 0, topClickTimer = null;
+const JIALE_FOG_BASE = THREE ? new THREE.Color(0x08111f) : null;
+const JIALE_FOG_WARM = THREE ? new THREE.Color(0x1d0b1a) : null;
+const JIALE_SUN_BASE = THREE ? new THREE.Color(0xffc49b) : null;
+const JIALE_SUN_WARM = THREE ? new THREE.Color(0xffa07a) : null;
+const JIALE_HEMI_BASE = THREE ? new THREE.Color(0x89c7ff) : null;
+const JIALE_HEMI_WARM = THREE ? new THREE.Color(0xffb0a0) : null;
+const JIALE_GATE_BASE = THREE ? new THREE.Color(0x4fe8ff) : null;
+const JIALE_GATE_WARM = THREE ? new THREE.Color(0xff9a6a) : null;
 
 /* 摄像机 */
 const camPos = { x: 0, y: 0, z: 0 };
@@ -1234,6 +1334,1117 @@ async function loadNames(){
 }
 
 /* ============================================================
+   场景增强：月亮 / 霓虹招牌 / 灯门 / 空气尘埃 / 头灯光锥
+   ============================================================ */
+function makeMoonTexture(){
+  return texFromCanvas(makeCanvas(256,256,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    const halo = c.createRadialGradient(w/2,h/2,w*.10,w/2,h/2,w*.50);
+    halo.addColorStop(0,'rgba(255,246,222,.34)');
+    halo.addColorStop(.32,'rgba(255,226,186,.14)');
+    halo.addColorStop(1,'rgba(255,210,170,0)');
+    c.fillStyle = halo; c.fillRect(0,0,w,h);
+
+    const disc = c.createRadialGradient(w*.42,h*.38,w*.02,w*.5,h*.5,w*.27);
+    disc.addColorStop(0,'rgba(255,253,246,1)');
+    disc.addColorStop(.68,'rgba(241,232,216,.96)');
+    disc.addColorStop(1,'rgba(214,204,192,.78)');
+    c.fillStyle = disc;
+    c.beginPath(); c.arc(w/2,h/2,w*.255,0,Math.PI*2); c.fill();
+
+    c.globalAlpha = .13;
+    c.fillStyle = '#8d8176';
+    [[.44,.44,.045],[.56,.53,.060],[.47,.60,.034],[.60,.41,.028],[.51,.34,.022]].forEach((p)=>{
+      c.beginPath(); c.arc(w*p[0],h*p[1],w*p[2],0,Math.PI*2); c.fill();
+    });
+    c.globalAlpha = 1;
+  }), true);
+}
+
+function buildSkyDecor(){
+  const mat = new THREE.SpriteMaterial({
+    map: makeMoonTexture(), transparent:true, opacity:.92,
+    depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false, fog:false
+  });
+  moonSprite = new THREE.Sprite(mat);
+  moonSprite.scale.set(62,62,1);
+  moonSprite.position.set(-168, 96, carZ + 540);
+  moonSprite.renderOrder = -2;
+  scene.add(moonSprite);
+}
+
+function makeNeonSignTexture(label, sub, color){
+  return texFromCanvas(makeCanvas(512,256,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    const bg = c.createLinearGradient(0,0,w,h);
+    bg.addColorStop(0,'rgba(6,15,28,.94)');
+    bg.addColorStop(.62,'rgba(4,9,19,.90)');
+    bg.addColorStop(1,'rgba(10,18,30,.86)');
+    c.fillStyle = bg;
+    roundRect(c, 10, 10, w-20, h-20, 18); c.fill();
+
+    c.save();
+    c.strokeStyle = color; c.lineWidth = 3;
+    c.shadowColor = color; c.shadowBlur = 22;
+    roundRect(c, 18, 18, w-36, h-36, 14); c.stroke();
+    c.restore();
+
+    c.strokeStyle = 'rgba(255,255,255,.10)'; c.lineWidth = 1;
+    roundRect(c, 26, 26, w-52, h-52, 10); c.stroke();
+
+    c.textAlign='center'; c.textBaseline='middle';
+    c.save();
+    c.shadowColor = color; c.shadowBlur = 28;
+    c.fillStyle = '#f6feff';
+    c.font = '900 92px "PingFang SC","Microsoft YaHei",sans-serif';
+    c.fillText(label, w/2, h*.45);
+    c.restore();
+
+    c.fillStyle = color;
+    c.font = '600 24px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    spacedText(c, sub, w/2, h*.76, 6);
+
+    c.fillStyle = color;
+    c.fillRect(w*.27, h*.86, w*.46, 2);
+  }), true);
+}
+
+function buildNeonSigns(){
+  const defs = [
+    { x:-14.6, y:9.4,  z:130, label:'极速', sub:'STREET',   color:'#5ce8ff' },
+    { x:15.4,  y:11.8, z:250, label:'抽取', sub:'RANDOM',   color:'#ff94b8' },
+    { x:-16.2, y:13.2, z:390, label:'夜赛', sub:'NIGHT RUN',color:'#a891ff' },
+    { x:14.8,  y:8.8,  z:540, label:'N₂O', sub:'BOOST',    color:'#5ce8ff' },
+    { x:-15.4, y:10.8, z:700, label:'幸运', sub:'LUCKY',    color:'#ffd27a' },
+    { x:16.0,  y:12.6, z:880, label:'夺冠', sub:'WINNER',   color:'#8dffc0' }
+  ];
+  defs.forEach((d, i)=>{
+    if(d.z > roadEnd - 50) return;
+    const tex = makeNeonSignTexture(d.label, d.sub, d.color);
+    const mat = new THREE.MeshBasicMaterial({
+      map:tex, transparent:true, opacity:.9, depthWrite:false,
+      side:THREE.DoubleSide, toneMapped:false
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 3.7), mat);
+    mesh.position.set(d.x, d.y, d.z);
+    mesh.rotation.y = Math.PI + (d.x < 0 ? -.36 : .36);
+    scene.add(mesh);
+
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:glowTex, color:new THREE.Color(d.color), transparent:true, opacity:.16,
+      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false, fog:false
+    }));
+    glow.scale.set(13, 7.5, 1);
+    glow.position.set(d.x, d.y, d.z - .25);
+    scene.add(glow);
+    neonSignMats.push({ mat, glow:glow.material, phase:i*1.7 });
+  });
+}
+
+function buildLightGates(){
+  const frameMat = new THREE.MeshStandardMaterial({
+    color:0x0d1926, roughness:.36, metalness:.78, envMapIntensity:1.0
+  });
+  const bannerTex = makeBannerTexture();
+  const bannerMat = new THREE.MeshBasicMaterial({
+    map:bannerTex, transparent:true, side:THREE.DoubleSide,
+    toneMapped:false, depthWrite:false
+  });
+  const count = Math.max(1, Math.min(7, Math.floor((roadEnd-120)/150)));
+  for(let i=0;i<count;i++){
+    const z = 120 + i*150;
+    if(z > roadEnd - 40) break;
+    const g = new THREE.Group();
+    const neon = new THREE.MeshBasicMaterial({ color:0x4fe8ff, toneMapped:false });
+    [-1,1].forEach(side=>{
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(.22,6.4,.22), frameMat);
+      pillar.position.set(side*8.5, 3.2, 0);
+      g.add(pillar);
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(.05,6.0,.05), neon);
+      strip.position.set(side*8.37, 3.2, .13);
+      g.add(strip);
+    });
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(17.2,.28,.22), frameMat);
+    beam.position.set(0,6.35,0);
+    g.add(beam);
+    const beamStrip = new THREE.Mesh(new THREE.BoxGeometry(16.6,.04,.05), neon);
+    beamStrip.position.set(0,6.17,.13);
+    g.add(beamStrip);
+
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(6.6,1.03), bannerMat);
+    banner.position.set(0,5.48,.02);
+    banner.rotation.y = Math.PI;
+    g.add(banner);
+
+    const bulbPos = [];
+    for(let k=0;k<25;k++) bulbPos.push(-8 + k*.665, 5.98, .15);
+    const bulbGeo = new THREE.BufferGeometry();
+    bulbGeo.setAttribute('position', new THREE.Float32BufferAttribute(bulbPos,3));
+    const bulbs = new THREE.Points(bulbGeo, new THREE.PointsMaterial({
+      map:glowTex, color:0xffe5b8, size:.52, transparent:true, opacity:.66,
+      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+    }));
+    g.add(bulbs);
+
+    g.position.z = z;
+    scene.add(g);
+    gateNeonMats.push(neon);
+  }
+}
+
+function buildDust(){
+  const N = IS_MOBILE ? 120 : 240;
+  const pos = new Float32Array(N*3);
+  const seed = new Float32Array(N*2);
+  for(let i=0;i<N;i++){
+    pos[i*3] = (Math.random()-.5)*22;
+    pos[i*3+1] = .3 + Math.random()*7.4;
+    pos[i*3+2] = Math.random()*Math.max(220, trackEnd);
+    seed[i*2] = Math.random()*Math.PI*2;
+    seed[i*2+1] = .4 + Math.random()*1.2;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const mat = new THREE.PointsMaterial({
+    map:glowTex, color:0xa8e4ff, size:.11, transparent:true, opacity:.32,
+    depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true, toneMapped:false
+  });
+  dustPoints = new THREE.Points(geo, mat);
+  dustPoints.frustumCulled = false;
+  scene.add(dustPoints);
+  dustPos = pos; dustSeed = seed;
+}
+
+function buildHeadlightCones(){
+  if(!carGroup) return;
+  const beamTex = texFromCanvas(makeCanvas(64,256,(c,w,h)=>{
+    const g = c.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'rgba(190,240,255,0)');
+    g.addColorStop(.16,'rgba(190,240,255,.30)');
+    g.addColorStop(.52,'rgba(150,225,255,.12)');
+    g.addColorStop(1,'rgba(150,225,255,0)');
+    c.fillStyle = g; c.fillRect(0,0,w,h);
+    const hg = c.createLinearGradient(0,0,w,0);
+    hg.addColorStop(0,'rgba(0,0,0,0)');
+    hg.addColorStop(.5,'rgba(255,255,255,.9)');
+    hg.addColorStop(1,'rgba(0,0,0,0)');
+    c.globalCompositeOperation = 'destination-in';
+    c.fillStyle = hg; c.fillRect(0,0,w,h);
+  }), true);
+  const mat = new THREE.MeshBasicMaterial({
+    map:beamTex, color:0xbfeeff, transparent:true, opacity:.15,
+    depthWrite:false, blending:THREE.AdditiveBlending,
+    side:THREE.DoubleSide, toneMapped:false
+  });
+  const geo = new THREE.CylinderGeometry(2.55, .10, 18, 20, 1, true);
+  geo.rotateX(Math.PI/2);
+  [-1,1].forEach(side=>{
+    const cone = new THREE.Mesh(geo, mat);
+    cone.position.set(side*.33, .47, 11.0);
+    cone.rotation.x = -.02;
+    cone.renderOrder = 2;
+    carGroup.add(cone);
+    headlightCones.push(cone);
+  });
+}
+
+function updateSceneExtras(dt){
+  if(moonSprite) moonSprite.position.z = carZ + 540;
+
+  for(let i=0;i<neonSignMats.length;i++){
+    const s = neonSignMats[i];
+    const pulse = .5 + .5*Math.sin(idleT*1.55 + s.phase);
+    s.glow.opacity = .10 + .10*pulse;
+    s.mat.opacity = .82 + .17*pulse;
+  }
+
+  if(dustPoints){
+    const p = dustPos;
+    for(let i=0;i<p.length/3;i++){
+      const ph = dustSeed[i*2];
+      p[i*3] += Math.sin(idleT*.7 + ph)*.09*dt;
+      p[i*3+1] += (.10 + Math.sin(idleT*.9 + ph)*.06)*dt;
+      p[i*3+2] += (.30 + dustSeed[i*2+1]*.22)*dt;
+      if(p[i*3+1] > 8.3) p[i*3+1] = .25;
+      if(p[i*3+2] > carZ + 310) p[i*3+2] = carZ - 35;
+      if(p[i*3+2] < carZ - 45) p[i*3+2] = carZ + 290;
+    }
+    dustPoints.geometry.attributes.position.needsUpdate = true;
+    dustPoints.material.opacity = .24 + .10*Math.sin(idleT*.8);
+  }
+}
+
+/* ============================================================
+   佳乐庆典：三击顶部进入 · 小人保龄球 · 周佳乐告示牌
+   ============================================================ */
+const JIALE_PALETTE = ['#ffd27a','#ff8fb6','#7de8ff','#a8ffcf','#ffb36b','#c9a7ff'];
+const JIALE_SKIN = [0xffd9b8, 0xf2c49b, 0xd9a06f, 0x8d5a3b];
+const JIALE_HAIR = [0x1b1720, 0x2b1d17, 0x3a2a20, 0x14263a, 0x4a2b32];
+const JIALE_SHIRT = [0xff6f91, 0x59d8ff, 0xffd166, 0x9b8cff, 0x7dffb0, 0xff9f68, 0xff5e6c];
+let jialeFanGeo = null;
+
+function easeOutBack(t){
+  const c1 = 1.70158, c3 = c1 + 1;
+  return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2);
+}
+
+function getJialeFanGeo(){
+  if(jialeFanGeo) return jialeFanGeo;
+  jialeFanGeo = {
+    head: new THREE.SphereGeometry(.20, 16, 12),
+    body: new THREE.CapsuleGeometry(.20, .42, 6, 12),
+    arm: new THREE.CapsuleGeometry(.062, .32, 4, 8),
+    leg: new THREE.CapsuleGeometry(.072, .34, 4, 8),
+    hand: new THREE.SphereGeometry(.07, 10, 8),
+    eye: new THREE.SphereGeometry(.028, 8, 6),
+    mouth: new THREE.BoxGeometry(.07,.014,.012),
+    hair: new THREE.SphereGeometry(.205, 16, 10, 0, Math.PI*2, 0, Math.PI*.48),
+    hat: new THREE.ConeGeometry(.15,.26,12),
+    shadow: new THREE.CircleGeometry(.48, 20),
+    signBoard: new THREE.PlaneGeometry(1.8,.9),
+    signStick: new THREE.CylinderGeometry(.025,.03,1.35,8),
+    glasses: new THREE.TorusGeometry(.06,.008,6,12)
+  };
+  return jialeFanGeo;
+}
+
+function makeJialeBannerTexture(){
+  return texFromCanvas(makeCanvas(1024,192,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    const bg = c.createLinearGradient(0,0,w,h);
+    bg.addColorStop(0,'rgba(82,22,34,.96)');
+    bg.addColorStop(.5,'rgba(48,16,30,.94)');
+    bg.addColorStop(1,'rgba(86,28,38,.96)');
+    c.fillStyle = bg; c.fillRect(0,0,w,h);
+    c.strokeStyle = 'rgba(255,208,140,.85)'; c.lineWidth = 3;
+    c.strokeRect(8,8,w-16,h-16);
+    c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 1;
+    c.strokeRect(16,16,w-32,h-32);
+    c.textAlign='center'; c.textBaseline='middle';
+    c.save();
+    c.shadowColor='rgba(255,170,90,.9)'; c.shadowBlur=26;
+    c.fillStyle='#ffe9c4';
+    c.font='900 78px "PingFang SC","Microsoft YaHei",sans-serif';
+    c.fillText('佳乐庆典', w/2, h*.50);
+    c.restore();
+    c.fillStyle='rgba(255,180,150,.85)';
+    c.font='500 20px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    spacedText(c,'J I A L E   F E S T I V A L', w/2, h*.80, 3);
+    c.fillStyle='rgba(255,210,140,.9)';
+    for(let i=0;i<10;i++){ c.beginPath(); c.arc(w*.08+i*w*.09, h*.16, 2.4, 0, Math.PI*2); c.fill(); }
+  }), true);
+}
+
+function makeJialeSignTexture(){
+  return texFromCanvas(makeCanvas(512,256,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    const bg = c.createLinearGradient(0,0,w,h);
+    bg.addColorStop(0,'#ffe6a8');
+    bg.addColorStop(.52,'#ffc46f');
+    bg.addColorStop(1,'#ff9d7a');
+    c.fillStyle=bg;
+    roundRect(c,10,10,w-20,h-20,26); c.fill();
+    c.strokeStyle='rgba(255,255,255,.92)'; c.lineWidth=5;
+    roundRect(c,10,10,w-20,h-20,26); c.stroke();
+    c.strokeStyle='rgba(120,42,38,.30)'; c.lineWidth=2;
+    roundRect(c,24,24,w-48,h-48,18); c.stroke();
+    c.textAlign='center'; c.textBaseline='middle';
+    c.save();
+    c.shadowColor='rgba(120,32,30,.35)'; c.shadowBlur=10;
+    c.fillStyle='#58201f';
+    c.font='900 118px "PingFang SC","Microsoft YaHei",sans-serif';
+    c.fillText('周佳乐', w/2, h*.47);
+    c.restore();
+    c.fillStyle='rgba(120,42,38,.82)';
+    c.font='700 22px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    spacedText(c,'JIALE  ·  FESTIVAL', w/2, h*.78, 4);
+    c.fillStyle='rgba(180,60,70,.75)';
+    [[w*.12,h*.22],[w*.88,h*.22],[w*.12,h*.76],[w*.88,h*.76]].forEach((p)=>{
+      const x=p[0], y=p[1];
+      c.beginPath();
+      c.moveTo(x,y+4);
+      c.bezierCurveTo(x,y-4,x-8,y-4,x-8,y+3);
+      c.bezierCurveTo(x-8,y+10,x,y+14,x,y+18);
+      c.bezierCurveTo(x,y+14,x+8,y+10,x+8,y+3);
+      c.bezierCurveTo(x+8,y-4,x,y-4,x,y+4);
+      c.fill();
+    });
+  }), true);
+}
+
+function makeLanternTexture(){
+  return texFromCanvas(makeCanvas(128,160,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    const halo = c.createRadialGradient(w/2,h*.52,w*.05,w/2,h*.52,w*.62);
+    halo.addColorStop(0,'rgba(255,200,120,.60)');
+    halo.addColorStop(.55,'rgba(255,140,90,.18)');
+    halo.addColorStop(1,'rgba(255,120,80,0)');
+    c.fillStyle=halo; c.fillRect(0,0,w,h);
+    const bg = c.createRadialGradient(w*.42,h*.42,w*.02,w/2,h*.5,w*.34);
+    bg.addColorStop(0,'#fff4d2');
+    bg.addColorStop(.55,'#ffc46e');
+    bg.addColorStop(1,'#e8705a');
+    c.fillStyle=bg;
+    c.beginPath(); c.ellipse(w/2,h*.5,w*.30,h*.36,0,0,Math.PI*2); c.fill();
+    c.strokeStyle='rgba(150,55,50,.24)'; c.lineWidth=2;
+    for(let i=-2;i<=2;i++){
+      const rx = w*(.08 + Math.abs(i)*.055);
+      c.beginPath(); c.ellipse(w/2,h*.5,rx,h*.36,0,0,Math.PI*2); c.stroke();
+    }
+    c.fillStyle='#8c4a3d';
+    c.fillRect(w*.43,h*.10,w*.14,h*.05);
+    c.fillRect(w*.43,h*.84,w*.14,h*.05);
+  }), true);
+}
+
+function makeConfettiSystem(max){
+  const pos = new Float32Array(max*3);
+  const col = new Float32Array(max*3);
+  for(let i=0;i<max;i++) pos[i*3+1] = -999;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col,3));
+  const tex = texFromCanvas(makeCanvas(32,32,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    c.fillStyle='#fff'; c.fillRect(6,6,w-12,h-12);
+  }), true);
+  const mat = new THREE.PointsMaterial({
+    size:.24, map:tex, vertexColors:true, transparent:true, opacity:.95,
+    depthWrite:false, sizeAttenuation:true
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  pts.renderOrder = 9;
+  scene.add(pts);
+  const vel = new Float32Array(max*3);
+  const life = new Float32Array(max);
+  const maxLife = new Float32Array(max);
+  const base = new Float32Array(max*3);
+  let cursor = 0;
+  return {
+    spawn(x,y,z,n,palette,speed){
+      palette = palette || JIALE_PALETTE;
+      for(let i=0;i<n;i++){
+        const j = cursor++ % max;
+        const idx = j*3;
+        pos[idx] = x + (Math.random()-.5)*3;
+        pos[idx+1] = y + Math.random()*1.5;
+        pos[idx+2] = z + (Math.random()-.5)*3;
+        const a = Math.random()*Math.PI*2;
+        const sp = (speed||4)*(.3+Math.random()*.8);
+        vel[idx] = Math.cos(a)*sp;
+        vel[idx+1] = 1.5 + Math.random()*3.5;
+        vel[idx+2] = Math.sin(a)*sp;
+        const c = new THREE.Color(palette[Math.floor(Math.random()*palette.length)]);
+        base[idx]=c.r; base[idx+1]=c.g; base[idx+2]=c.b;
+        col[idx]=c.r; col[idx+1]=c.g; col[idx+2]=c.b;
+        maxLife[j] = 2.2 + Math.random()*2.2;
+        life[j] = maxLife[j];
+      }
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate = true;
+    },
+    update(dt){
+      let dirty = false;
+      for(let i=0;i<max;i++){
+        if(life[i] <= 0) continue;
+        dirty = true;
+        life[i] -= dt;
+        const idx = i*3;
+        if(life[i] <= 0){ pos[idx+1] = -999; col[idx]=col[idx+1]=col[idx+2]=0; continue; }
+        vel[idx+1] -= 2.2*dt;
+        vel[idx] *= (1-1.4*dt);
+        vel[idx+2] *= (1-1.4*dt);
+        pos[idx] += (vel[idx] + Math.sin((life[i]+i)*3)*.6)*dt;
+        pos[idx+1] += vel[idx+1]*dt;
+        pos[idx+2] += vel[idx+2]*dt;
+        if(pos[idx+1] < .04){ pos[idx+1]=.04; vel[idx+1]*=-.25; vel[idx]*=.6; vel[idx+2]*=.6; }
+        const f = clamp(life[i]/maxLife[i],0,1);
+        col[idx]=base[idx]*f; col[idx+1]=base[idx+1]*f; col[idx+2]=base[idx+2]*f;
+      }
+      if(dirty){ geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; }
+    }
+  };
+}
+
+function buildJialeDecor(){
+  jialeDecor = new THREE.Group();
+  jialeDecor.visible = false;
+  scene.add(jialeDecor);
+
+  const bannerTex = makeJialeBannerTexture();
+  const bannerMat = new THREE.MeshBasicMaterial({
+    map:bannerTex, transparent:true, side:THREE.DoubleSide,
+    toneMapped:false, depthWrite:false
+  });
+  for(let z=120; z<roadEnd-40; z+=150){
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(7.4,1.5), bannerMat);
+    b.position.set(0,5.45,z-.28);
+    b.rotation.y = Math.PI;
+    jialeDecor.add(b);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:glowTex, color:0xffb36b, transparent:true, opacity:.14,
+      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+    }));
+    glow.scale.set(9,3,1);
+    glow.position.set(0,5.45,z-.36);
+    jialeDecor.add(glow);
+  }
+
+  buildJialeArch(jialeDecor, 78);
+  buildJialeStringLights(jialeDecor);
+  buildJialeLanterns(jialeDecor);
+  jialeConfetti = makeConfettiSystem(IS_MOBILE ? 360 : 700);
+  buildJialeSpotlights();
+}
+
+function buildJialeArch(parent, z){
+  const frame = new THREE.MeshStandardMaterial({color:0x2a141a, roughness:.36, metalness:.68});
+  const neon = new THREE.MeshBasicMaterial({color:0xff9a6a, toneMapped:false});
+  const lanternTex = makeLanternTexture();
+  const g = new THREE.Group();
+  [-1,1].forEach(side=>{
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(.18,.22,7.8,12), frame);
+    pillar.position.set(side*8.4,3.9,0);
+    g.add(pillar);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,7.4,8), neon);
+    tube.position.set(side*8.18,3.9,.12);
+    g.add(tube);
+    const lantern = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:lanternTex, color:0xffd08a, transparent:true, opacity:.9,
+      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+    }));
+    lantern.scale.set(1.1,1.4,1);
+    lantern.position.set(side*8.4,8.0,0);
+    g.add(lantern);
+  });
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(17.4,.24,.24), frame);
+  beam.position.set(0,7.6,0);
+  g.add(beam);
+  const neonBeam = new THREE.Mesh(new THREE.BoxGeometry(16.8,.04,.05), neon);
+  neonBeam.position.set(0,7.44,.13);
+  g.add(neonBeam);
+  const banner = new THREE.Mesh(
+    new THREE.PlaneGeometry(8.4,1.5),
+    new THREE.MeshBasicMaterial({
+      map:makeJialeBannerTexture(), transparent:true, side:THREE.DoubleSide,
+      toneMapped:false, depthWrite:false
+    })
+  );
+  banner.position.set(0,6.65,.12);
+  banner.rotation.y = Math.PI;
+  g.add(banner);
+  g.position.z = z;
+  parent.add(g);
+}
+
+function buildJialeStringLights(parent){
+  const positions = [], colors = [];
+  const palette = [[1,.78,.42],[1,.55,.65],[.55,.9,1],[1,1,.9],[.7,1,.7]];
+  for(let s=0;s<6;s++){
+    const z = 100 + s*170;
+    if(z > roadEnd-40) break;
+    const sag = 1.0 + Math.random()*.6;
+    for(let i=0;i<=22;i++){
+      const t = i/22;
+      positions.push(-8 + t*16, 6.9 - Math.sin(t*Math.PI)*sag, z);
+      const c = palette[(s+i) % palette.length];
+      colors.push(c[0], c[1], c[2]);
+    }
+  }
+  if(!positions.length) return;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+    map:glowTex, vertexColors:true, size:.30, transparent:true, opacity:.85,
+    depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+  }));
+  pts.frustumCulled = false;
+  parent.add(pts);
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
+    color:0xffc98a, transparent:true, opacity:.15, toneMapped:false
+  }));
+  parent.add(line);
+}
+
+function buildJialeLanterns(parent){
+  const tex = makeLanternTexture();
+  const palette = [0xffc06e,0xff8f9e,0xffd98a,0xff9f7a,0xa8ffcf];
+  for(let i=0;i<18;i++){
+    const mat = new THREE.SpriteMaterial({
+      map:tex, color:palette[i%palette.length], transparent:true, opacity:.9,
+      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+    });
+    const sp = new THREE.Sprite(mat);
+    const x = (i%2 ? 1 : -1)*(10 + Math.random()*5);
+    const z = 60 + Math.random()*Math.max(200, trackEnd);
+    sp.position.set(x, 2 + Math.random()*8, z);
+    sp.scale.set(1.4 + Math.random()*.8, 1.7 + Math.random()*.9, 1);
+    parent.add(sp);
+    jialeLanterns.push({
+      sprite: sp, baseX: x, phase: Math.random()*Math.PI*2,
+      speed: .25 + Math.random()*.4
+    });
+  }
+}
+
+function buildJialeSpotlights(){
+  for(let i=0;i<2;i++){
+    const light = new THREE.SpotLight(i ? 0xff7fa8 : 0xffb36b, 0, 70, .55, .85, 1.2);
+    const target = new THREE.Object3D();
+    target.position.set(0,0,20);
+    scene.add(light);
+    scene.add(target);
+    light.target = target;
+    jialeSpotlights.push({ light, target });
+  }
+}
+
+function createJialeFan(index){
+  const geo = getJialeFanGeo();
+  const g = new THREE.Group();
+  const bodyGroup = new THREE.Group();
+  g.add(bodyGroup);
+
+  const shirt = JIALE_SHIRT[index % JIALE_SHIRT.length];
+  const skin = JIALE_SKIN[Math.floor(Math.random()*JIALE_SKIN.length)];
+  const hair = JIALE_HAIR[Math.floor(Math.random()*JIALE_HAIR.length)];
+  const accent = JIALE_PALETTE[index % JIALE_PALETTE.length];
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color:shirt, roughness:.55, metalness:.04,
+    emissive:new THREE.Color(shirt).multiplyScalar(.10)
+  });
+  const skinMat = new THREE.MeshStandardMaterial({color:skin, roughness:.72});
+  const hairMat = new THREE.MeshStandardMaterial({color:hair, roughness:.82});
+  const darkMat = new THREE.MeshStandardMaterial({color:0x18141c, roughness:.6});
+  const accentMat = new THREE.MeshBasicMaterial({color:accent, toneMapped:false});
+
+  const body = new THREE.Mesh(geo.body, bodyMat);
+  body.position.y = 1.02;
+  bodyGroup.add(body);
+
+  const head = new THREE.Mesh(geo.head, skinMat);
+  head.position.y = 1.56;
+  bodyGroup.add(head);
+
+  const hairCap = new THREE.Mesh(geo.hair, hairMat);
+  hairCap.position.y = 1.58;
+  hairCap.rotation.x = -.10;
+  bodyGroup.add(hairCap);
+
+  const eyeL = new THREE.Mesh(geo.eye, darkMat);
+  eyeL.position.set(-.072,1.585,.178);
+  bodyGroup.add(eyeL);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = .072;
+  bodyGroup.add(eyeR);
+
+  const mouth = new THREE.Mesh(geo.mouth, darkMat);
+  mouth.position.set(0,1.492,.192);
+  bodyGroup.add(mouth);
+
+  const armL = new THREE.Group();
+  armL.position.set(-.255,1.28,0);
+  bodyGroup.add(armL);
+  const armLMesh = new THREE.Mesh(geo.arm, bodyMat);
+  armLMesh.position.y = -.18;
+  armL.add(armLMesh);
+  const handL = new THREE.Mesh(geo.hand, skinMat);
+  handL.position.y = -.40;
+  armL.add(handL);
+
+  const armR = new THREE.Group();
+  armR.position.set(.255,1.28,0);
+  bodyGroup.add(armR);
+  const armRMesh = new THREE.Mesh(geo.arm, bodyMat);
+  armRMesh.position.y = -.18;
+  armR.add(armRMesh);
+  const handR = new THREE.Mesh(geo.hand, skinMat);
+  handR.position.y = -.40;
+  armR.add(handR);
+
+  const legMat = new THREE.MeshStandardMaterial({color:0x222a36, roughness:.72});
+  const legL = new THREE.Group();
+  legL.position.set(-.105,.64,0);
+  bodyGroup.add(legL);
+  const legLMesh = new THREE.Mesh(geo.leg, legMat);
+  legLMesh.position.y = -.18;
+  legL.add(legLMesh);
+  const legR = legL.clone();
+  legR.position.x = .105;
+  bodyGroup.add(legR);
+
+  const pose = Math.floor(Math.random()*5);
+  let lz = .22, rz = -.22, lx = 0, rx = 0;
+  if(pose === 0){ lz = 2.55; rz = -2.55; }
+  else if(pose === 1){ lz = 2.45; rz = -.35; }
+  else if(pose === 2){ lx = -1.35; rx = -1.35; }
+  else if(pose === 3){ lz = .95; rz = -2.35; lx = -.5; }
+  else { lx = -2.45; rx = -2.45; }
+  armL.rotation.z = lz; armL.rotation.x = lx;
+  armR.rotation.z = rz; armR.rotation.x = rx;
+  legL.rotation.z = .04 + Math.random()*.08;
+  legR.rotation.z = -.04 - Math.random()*.08;
+
+  if(Math.random() < .38){
+    const hat = new THREE.Mesh(geo.hat, accentMat);
+    hat.position.set(0,1.84,0);
+    hat.rotation.z = (Math.random()-.5)*.25;
+    bodyGroup.add(hat);
+  }
+  if(Math.random() < .25){
+    const ringMat = new THREE.MeshBasicMaterial({color:0xfff1c4, toneMapped:false});
+    [-1,1].forEach(side=>{
+      const ring = new THREE.Mesh(geo.glasses, ringMat);
+      ring.position.set(side*.072,1.585,.192);
+      bodyGroup.add(ring);
+    });
+  }
+
+  const shadow = new THREE.Mesh(geo.shadow, new THREE.MeshBasicMaterial({
+    color:0x000000, transparent:true, opacity:.30, depthWrite:false
+  }));
+  shadow.rotation.x = -Math.PI/2;
+  shadow.position.y = .013;
+
+  g.scale.setScalar(.92 + Math.random()*.28);
+
+  return {
+    group:g, bodyGroup, shadow, armL, armR, head,
+    baseLX:lx, baseLZ:lz, baseRX:rx, baseRZ:rz,
+    phase: Math.random()*Math.PI*2,
+    state:'idle', hitT:0, fleeT:0, signT:0, turnT:null,
+    signGroup:null, signBoard:null, signGlow:null,
+    homeX:0, homeZ:0
+  };
+}
+
+function attachJialeSign(fan){
+  if(fan.signGroup) return fan.signGroup;
+  const geo = getJialeFanGeo();
+  const tex = makeJialeSignTexture();
+  const board = new THREE.Mesh(geo.signBoard, new THREE.MeshBasicMaterial({
+    map:tex, transparent:true, side:THREE.DoubleSide,
+    toneMapped:false, depthWrite:false
+  }));
+  board.position.set(0,2.55,.16);
+  const stick = new THREE.Mesh(geo.signStick, new THREE.MeshStandardMaterial({
+    color:0x8a5a36, roughness:.6
+  }));
+  stick.position.set(0,1.78,.10);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:glowTex, color:0xffc06a, transparent:true, opacity:.25,
+    depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+  }));
+  glow.scale.set(3.4,2.3,1);
+  glow.position.set(0,2.5,.04);
+  const sg = new THREE.Group();
+  sg.add(stick, board, glow);
+  sg.visible = false;
+  sg.scale.setScalar(.2);
+  fan.group.add(sg);
+  fan.signGroup = sg;
+  fan.signBoard = board;
+  fan.signGlow = glow.material;
+  return sg;
+}
+
+function spawnJialeFans(){
+  clearJialeFans();
+  if(!scene) return;
+  jialeFanGroup = new THREE.Group();
+  scene.add(jialeFanGroup);
+  const total = IS_MOBILE ? 12 : 16;
+  const spacing = 19 + Math.random()*4;
+  const startZ = carZ + 30;
+  for(let i=0;i<total;i++){
+    const fan = createJialeFan(i);
+    const z = startZ + i*spacing + (Math.random()-.5)*2.5;
+    const side = i % 2 === 0 ? -1 : 1;
+    const x = side*(.35 + Math.random()*1.15) + (Math.random()-.5)*.35;
+    fan.group.position.set(x, 0, z);
+    fan.group.rotation.y = Math.PI;
+    fan.homeX = x;
+    fan.homeZ = z;
+    jialeFanGroup.add(fan.group);
+    jialeFanGroup.add(fan.shadow);
+    fan.shadow.position.set(x, .013, z);
+    jialeFans.push(fan);
+  }
+}
+
+function spawnFinalJialeFan(z){
+  const fan = createJialeFan(Math.floor(Math.random()*6));
+  fan.group.position.set(.7, 0, z);
+  fan.group.rotation.y = Math.PI;
+  fan.homeX = .7;
+  fan.homeZ = z;
+  if(!jialeFanGroup){
+    jialeFanGroup = new THREE.Group();
+    scene.add(jialeFanGroup);
+  }
+  jialeFanGroup.add(fan.group);
+  jialeFanGroup.add(fan.shadow);
+  fan.shadow.position.set(.7, .013, z);
+  jialeFans.push(fan);
+  return fan;
+}
+
+function clearJialeFans(){
+  jialeSignFan = null;
+  if(!jialeFanGroup){ jialeFans = []; return; }
+  scene.remove(jialeFanGroup);
+  jialeFanGroup.traverse(o=>{
+    if(!o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(m=>{
+      if(m.map && m.map !== glowTex) m.map.dispose();
+      m.dispose();
+    });
+  });
+  jialeFanGroup = null;
+  jialeFans = [];
+}
+
+function pickJialeSignFan(){
+  const v = Math.max(vel, .1);
+  const natural = (v*v)/(2*BRAKE_A);
+  const desired = carZ + Math.max(natural, 14) + 5.4;
+  let best = null, bestD = Infinity;
+  for(const f of jialeFans){
+    if(f.state !== 'idle') continue;
+    const z = f.group.position.z;
+    if(z < carZ + 9) continue;
+    const d = Math.abs(z - desired);
+    if(d < bestD){ best = f; bestD = d; }
+  }
+  if(!best) best = spawnFinalJialeFan(desired);
+  return best;
+}
+
+function beginJialeStop(fan, auto){
+  if(phase !== 'running' || !fan) return;
+  jialeSignFan = fan;
+  fan.state = 'sign';
+  fan.signT = 0;
+  fan.turnT = null;
+  const stopZ = fan.group.position.z - 5.4;
+  stopTargetIndex = -1;
+  stopTargetZ = Math.max(carZ + 2.5, stopZ);
+  const d = stopTargetZ - carZ;
+  stopDecel = d > 0 ? Math.max(.15, (vel*vel)/(2*d)) : 50;
+  vel = Math.max(vel, .1);
+  nitroHeld = false; nitroOn = false; nitroLock = false;
+  setPhase('stopping');
+  brakeBtn.classList.add('active');
+  setTimeout(()=>brakeBtn.classList.remove('active'), 280);
+  raiseJialeSign(fan);
+  for(const f of jialeFans){
+    if(f === fan || f.state !== 'idle') continue;
+    if(f.group.position.z > fan.group.position.z + 1.5){
+      f.state = 'flee';
+      f.fleeT = 0;
+      f.fleeVX = (f.group.position.x >= 0 ? 1 : -1) * (3 + Math.random()*4);
+      f.fleeVZ = 1.5 + Math.random()*3;
+    }
+  }
+}
+
+function raiseJialeSign(fan){
+  attachJialeSign(fan);
+  fan.signGroup.visible = true;
+  fan.signT = 0;
+  Sfx.jialeSign();
+  if(burst) burst.spawn(fan.group.position.x, 2.4, fan.group.position.z, IS_MOBILE?32:55,
+    [[1,.8,.4],[1,.6,.7],[1,1,1],[.7,.9,1]], 7);
+  if(jialeConfetti) jialeConfetti.spawn(fan.group.position.x, 3.0, fan.group.position.z,
+    IS_MOBILE?50:90, JIALE_PALETTE, 6);
+  showJialeToast('最后一个小人 · 周佳乐');
+}
+
+function knockJialeFan(fan){
+  if(fan.state !== 'idle') return;
+  fan.state = 'hit';
+  fan.hitT = 0;
+  fan.vx = (fan.group.position.x >= 0 ? 1 : -1)*(3.5 + Math.random()*5) + (Math.random()-.5)*3;
+  fan.vy = 7.5 + Math.random()*5;
+  fan.vz = 7 + Math.random()*8 + vel*.12;
+  fan.spinX = (Math.random()-.5)*10;
+  fan.spinY = (Math.random()-.5)*12;
+  fan.spinZ = (Math.random()-.5)*10;
+  Sfx.fanHit();
+  if(burst) burst.spawn(fan.group.position.x, 1.2, fan.group.position.z,
+    IS_MOBILE?12:18, [[1,.8,.4],[1,.5,.6],[.6,.9,1],[1,1,1]], 7);
+  if(rings) rings.spawn(fan.group.position.x, .022, fan.group.position.z, .4, 3.2, .6, 0xffb36b);
+  if(jialeConfetti) jialeConfetti.spawn(fan.group.position.x, 1.8, fan.group.position.z,
+    IS_MOBILE?12:20, JIALE_PALETTE, 5);
+}
+
+function finishJialeRound(){
+  winnerName = '周佳乐';
+  winnerSlot = null;
+  groundRevealT = 0;
+  if(brakeLightMat) brakeLightMat.color.setHex(0xff3c57);
+  Sfx.end();
+  Sfx.jialeReveal();
+  if(jialeSignFan){
+    jialeSignFan.turnT = 0;
+    jialeSignFan.revealT = 0;
+  }
+  if(rings) rings.spawn(0, .022, stopTargetZ + 4.2, .6, 14, 1.7, 0xffb36b);
+  if(burst) burst.spawn(0, 1.4, stopTargetZ + 4.6, IS_MOBILE?60:120,
+    [[1,.8,.44],[1,.5,.6],[.55,.9,1],[1,1,1]], 10);
+  if(jialeConfetti) jialeConfetti.spawn(0, 3.0, stopTargetZ + 4,
+    IS_MOBILE?90:180, JIALE_PALETTE, 8);
+  showJialeToast('周佳乐 · 佳乐庆典');
+  updateNitroUI(true);
+  setJialeResultCopy(true);
+  resultName.textContent = winnerName;
+  resultTimer = setTimeout(()=>{
+    if(phase !== 'reveal') return;
+    resultDock.classList.add('show');
+    document.body.classList.add('result-open');
+  }, REDUCED ? 600 : 1900);
+}
+
+function setJialeResultCopy(on){
+  if(resultKickerEl) resultKickerEl.textContent = on ? 'JIALE FESTIVAL · 庆典抽中' : RESULT_KICKER_DEFAULT;
+  if(resultSubEl) resultSubEl.textContent = on ? '最后一个小人举起了「周佳乐」' : RESULT_SUB_DEFAULT;
+}
+
+function resetJialeRound(){
+  clearJialeFans();
+  setJialeResultCopy(false);
+  jialeFireworkT = 0;
+  jialeConfettiT = 0;
+  roadMarkMeshes.forEach(m=>{ m.visible = !jialeMode; });
+  if(nameGroup) nameGroup.visible = true;
+  if(jialeDecor) jialeDecor.visible = jialeMode || jialeMix > .02;
+}
+
+function enterJiale(){
+  if(jialeMode) return;
+  jialeMode = true;
+  jialeMixTarget = 1;
+  document.body.classList.add('jiale-mode');
+  if(jialeDecor) jialeDecor.visible = true;
+  roadMarkMeshes.forEach(m=>{ m.visible = false; });
+  if(nameGroup) nameGroup.visible = true;
+  Sfx.jialeEnter();
+  showJialeToast('佳乐庆典 · 周佳乐出没');
+  if(phase === 'idle'){
+    setTimeout(()=>{
+      if(jialeMode && phase === 'idle' && scene) beginRound();
+    }, 420);
+  }else if(phase === 'running'){
+    spawnJialeFans();
+  }
+}
+
+function exitJiale(){
+  if(!jialeMode) return;
+  jialeMode = false;
+  jialeMixTarget = 0;
+  document.body.classList.remove('jiale-mode');
+  clearJialeFans();
+  setJialeResultCopy(false);
+  roadMarkMeshes.forEach(m=>{ m.visible = true; });
+  if(nameGroup) nameGroup.visible = true;
+  showJialeToast('已退出佳乐庆典');
+  if(phase === 'reveal'){
+    hideResult();
+    setPhase('idle');
+    carZ = 0;
+    vel = 0;
+    resetCarPose();
+    cameraReady = false;
+    fader.classList.add('show');
+    setTimeout(()=>fader.classList.remove('show'), 220);
+  }else if(phase === 'running'){
+    layoutNamesForRound();
+    resetNameVisuals();
+  }
+}
+
+function toggleJiale(){
+  if(phase === 'stopping'){
+    showJialeToast('本轮结束后再试');
+    return;
+  }
+  if(phase === 'reveal'){
+    if(jialeMode && resultDock.classList.contains('show')) exitJiale();
+    else showJialeToast('本轮结束后再试');
+    return;
+  }
+  if(jialeMode) exitJiale();
+  else enterJiale();
+}
+
+function showJialeToast(text){
+  if(!jialeToastEl) return;
+  jialeToastEl.textContent = text;
+  jialeToastEl.classList.add('show');
+  clearTimeout(jialeToastTimer);
+  jialeToastTimer = setTimeout(()=>jialeToastEl.classList.remove('show'), 1800);
+}
+
+function bindJialeTrigger(el){
+  if(!el) return;
+  el.addEventListener('click', (e)=>{
+    if(e.target && e.target.closest && e.target.closest('#backBtn, #muteBtn, input')) return;
+    topClickCount++;
+    clearTimeout(topClickTimer);
+    topClickTimer = setTimeout(()=>{ topClickCount = 0; }, 780);
+    if(topClickCount >= 3){
+      topClickCount = 0;
+      toggleJiale();
+    }
+  });
+}
+
+function updateJiale(dt){
+  jialeMix = damp(jialeMix, jialeMixTarget, 3.2, dt);
+  if(scene && scene.fog && JIALE_FOG_BASE){
+    scene.fog.color.copy(JIALE_FOG_BASE).lerp(JIALE_FOG_WARM, jialeMix);
+  }
+  if(renderer) renderer.toneMappingExposure = lerp(1.08, 1.16, jialeMix);
+  if(sunLight && JIALE_SUN_BASE){
+    sunLight.color.copy(JIALE_SUN_BASE).lerp(JIALE_SUN_WARM, jialeMix);
+    sunLight.intensity = lerp(2.6, 2.25, jialeMix);
+  }
+  if(hemiLight && JIALE_HEMI_BASE){
+    hemiLight.color.copy(JIALE_HEMI_BASE).lerp(JIALE_HEMI_WARM, jialeMix);
+    hemiLight.intensity = lerp(.52, .64, jialeMix);
+  }
+  if(JIALE_GATE_BASE){
+    for(const m of gateNeonMats){
+      if(m && m.color) m.color.copy(JIALE_GATE_BASE).lerp(JIALE_GATE_WARM, jialeMix);
+    }
+  }
+  if(jialeGlowEl) jialeGlowEl.style.opacity = (jialeMix * .62).toFixed(3);
+  if(jialeDecor){
+    if(jialeMode) jialeDecor.visible = true;
+    else if(jialeMix < .02) jialeDecor.visible = false;
+  }
+
+  for(let i=0;i<jialeSpotlights.length;i++){
+    const sp = jialeSpotlights[i];
+    sp.light.position.set((i ? 1 : -1) * 11, 9, carZ + 16);
+    sp.target.position.set(0, 0, carZ + 34);
+    sp.light.target.updateMatrixWorld();
+    sp.light.intensity = 52 * jialeMix;
+  }
+
+  for(const l of jialeLanterns){
+    const sp = l.sprite;
+    sp.position.y += l.speed * dt;
+    sp.position.x = l.baseX + Math.sin(idleT * .55 + l.phase) * .65;
+    if(sp.position.y > 13.5) sp.position.y = 1.6;
+    if(sp.position.z < carZ - 30){
+      sp.position.z = carZ + 160 + Math.random() * 120;
+      l.baseX = (Math.random() < .5 ? -1 : 1) * (10 + Math.random() * 5);
+    }
+  }
+
+  const z0 = carZ - Math.max(1.2, vel * dt * 1.6) - 1.4;
+  const z1 = carZ + 2.8;
+  const canHit = phase === 'running' || phase === 'stopping';
+
+  for(const f of jialeFans){
+    if(f.state === 'hit'){
+      f.hitT += dt;
+      f.vy -= 24 * dt;
+      f.group.position.x += f.vx * dt;
+      f.group.position.y = Math.max(.12, f.group.position.y + f.vy * dt);
+      f.group.position.z += f.vz * dt;
+      f.group.rotation.x += f.spinX * dt;
+      f.group.rotation.y += f.spinY * dt;
+      f.group.rotation.z += f.spinZ * dt;
+      if(f.group.position.y <= .125 && f.vy < 0){
+        f.group.position.y = .125;
+        f.vy = -f.vy * .32;
+        f.vx *= .68;
+        f.vz *= .68;
+        f.spinX *= .65;
+        f.spinY *= .65;
+        f.spinZ *= .65;
+        if(Math.abs(f.vy) < 1.4) f.vy = 0;
+      }
+    }else if(f.state === 'flee'){
+      f.fleeT += dt;
+      f.group.position.x += f.fleeVX * dt;
+      f.group.position.z += f.fleeVZ * dt;
+      f.group.position.y = Math.abs(Math.sin(f.fleeT * 11 + f.phase)) * .18;
+      f.group.rotation.z = Math.sin(f.fleeT * 10 + f.phase) * .18;
+      if(f.fleeT > 1.4) f.group.visible = false;
+    }else if(f.state === 'sign'){
+      f.signT += dt;
+      const e = easeOutCubic(clamp(f.signT / .55, 0, 1));
+      f.armR.rotation.x = lerp(f.baseRX, -2.62, e);
+      f.armR.rotation.z = lerp(f.baseRZ, -.28, e);
+      f.armL.rotation.x = lerp(f.baseLX, -2.2, e);
+      f.armL.rotation.z = lerp(f.baseLZ, .5, e);
+      if(f.signGroup){
+        f.signGroup.visible = true;
+        const se = easeOutBack(clamp((f.signT - .08) / .55, 0, 1));
+        f.signGroup.scale.setScalar(.2 + .8 * se);
+        f.signGroup.position.y = Math.sin(idleT * 4) * .025;
+        if(f.signGlow) f.signGlow.opacity = .18 + .10 * Math.sin(idleT * 3.4);
+      }
+      f.bodyGroup.position.y = Math.abs(Math.sin(f.signT * 7)) * .05;
+      if(f.turnT !== null && f.turnT !== undefined){
+        f.turnT += dt;
+        const tt = easeInOutCubic(clamp(f.turnT / .55, 0, 1));
+        const targetAng = camera ? Math.atan2(
+          camera.position.x - f.group.position.x,
+          camera.position.z - f.group.position.z
+        ) : 0;
+        f.group.rotation.y = lerp(Math.PI, targetAng, tt);
+      }
+    }else{
+      f.group.position.y = Math.sin(idleT * 2.4 + f.phase) * .035;
+      f.bodyGroup.rotation.z = Math.sin(idleT * 1.7 + f.phase) * .06;
+      f.armL.rotation.x = f.baseLX + Math.sin(idleT * 3.2 + f.phase) * .30;
+      f.armR.rotation.x = f.baseRX + Math.sin(idleT * 2.8 + f.phase + 1) * .30;
+      f.armL.rotation.z = f.baseLZ + Math.sin(idleT * 2.1 + f.phase) * .10;
+      f.armR.rotation.z = f.baseRZ - Math.sin(idleT * 2.3 + f.phase) * .10;
+      f.head.rotation.y = Math.sin(idleT * 1.1 + f.phase) * .22;
+      if(canHit && f.group.position.z >= z0 && f.group.position.z <= z1 && Math.abs(f.group.position.x) < 2.4){
+        knockJialeFan(f);
+      }
+    }
+    if(f.shadow){
+      f.shadow.position.set(f.group.position.x, .013, f.group.position.z);
+      f.shadow.material.opacity = .30 * clamp(1 - f.group.position.y / 7, 0, 1);
+      f.shadow.visible = f.group.visible;
+    }
+  }
+
+  if(jialeConfetti) jialeConfetti.update(dt);
+  if(jialeMix > .35){
+    jialeFireworkT -= dt;
+    if(jialeFireworkT <= 0 && phase === 'running'){
+      jialeFireworkT = 2.0 + Math.random() * 2.6;
+      if(burst) burst.spawn((Math.random()-.5)*110, 18 + Math.random()*12,
+        carZ + 70 + Math.random()*120, IS_MOBILE ? 26 : 48,
+        [[1,.8,.45],[1,.5,.6],[.6,.9,1],[1,1,1],[.7,1,.75]], 13);
+    }
+    if(phase === 'running' && jialeConfetti){
+      jialeConfettiT -= dt;
+      if(jialeConfettiT <= 0){
+        jialeConfettiT = .8 + Math.random() * .9;
+        jialeConfetti.spawn((Math.random()-.5)*9, 5 + Math.random()*3,
+          carZ + 10 + Math.random()*35, IS_MOBILE ? 8 : 14, JIALE_PALETTE, 2.4);
+      }
+    }
+  }
+}
+
+/* ============================================================
    场景构建
    ============================================================ */
 function initScene(){
@@ -1276,10 +2487,16 @@ function initScene(){
   computeTrackLayout();
   buildRoad();
   buildCity();
+  buildSkyDecor();
+  buildNeonSigns();
+  buildLightGates();
+  buildDust();
   buildStartGantry();
   buildCar();
+  buildHeadlightCones();
   buildNameSlots();
   buildEffects();
+  buildJialeDecor();
   layoutNamesForRound();
   resetCarPose();
 
@@ -1295,7 +2512,8 @@ function computeTrackLayout(){
 }
 
 function buildLights(){
-  scene.add(new THREE.HemisphereLight(0x89c7ff, 0x0a0c13, .52));
+  hemiLight = new THREE.HemisphereLight(0x89c7ff, 0x0a0c13, .52);
+  scene.add(hemiLight);
 
   sunLight = new THREE.DirectionalLight(0xffc49b, 2.6);
   sunLight.position.set(-38, 44, 70);
@@ -1391,6 +2609,7 @@ function buildRoad(){
     const line = new THREE.Mesh(new THREE.PlaneGeometry(.13, roadEnd+240), lineMat);
     line.rotation.x = -Math.PI/2;
     line.position.set(s*6.85, .018, roadEnd*.5 - 80);
+    roadMarkMeshes.push(line);
     scene.add(line);
   });
 
@@ -1464,6 +2683,7 @@ function buildRoad(){
   );
   check.rotation.x = -Math.PI/2;
   check.position.set(0,.024,10);
+  roadMarkMeshes.push(check);
   scene.add(check);
 
   // 路面 START 字样
@@ -1485,6 +2705,7 @@ function buildRoad(){
   );
   startMark.position.set(0,.026,31);
   startMark.renderOrder = 2;
+  roadMarkMeshes.push(startMark);
   scene.add(startMark);
 
   // 路灯光柱（用点精灵，不增加真实点光源）
@@ -2136,14 +3357,14 @@ function buildCar(){
   });
 
   // 车底光晕 / 空气动力阴影
-  const underGlow = new THREE.Mesh(
+  underGlowMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(2.8,5.2),
     new THREE.MeshBasicMaterial({map:glowTex, color:0x35d8ff, transparent:true, opacity:.10, depthWrite:false, blending:THREE.AdditiveBlending})
   );
-  underGlow.rotation.x = -Math.PI/2;
-  underGlow.position.y = .028;
-  underGlow.renderOrder = 1;
-  carGroup.add(underGlow);
+  underGlowMesh.rotation.x = -Math.PI/2;
+  underGlowMesh.position.y = .028;
+  underGlowMesh.renderOrder = 1;
+  carGroup.add(underGlowMesh);
   const contact = new THREE.Mesh(
     new THREE.PlaneGeometry(3.1,5.1),
     new THREE.MeshBasicMaterial({map:glowTex, color:0x000000, transparent:true, opacity:.55, depthWrite:false})
@@ -2497,6 +3718,8 @@ function beginRound(){
   stopTargetIndex = -1; stopTargetZ = 0; stopDecel = 0;
   winnerName = ''; winnerSlot = null;
   phaseT = 0; idleT = 0;
+  resetJialeRound();
+  if(jialeMode) spawnJialeFans();
   Sfx.ignite();
   Sfx.begin();
   setPhase('running');
@@ -2521,7 +3744,15 @@ function setPhase(p){
   document.body.dataset.phase = p;
 }
 function requestBrake(){
-  if(phase !== 'running' || !nameSlots.length) return;
+  if(phase !== 'running') return;
+  if(jialeMode){
+    const fan = pickJialeSignFan();
+    if(!fan) return;
+    Sfx.brake();
+    beginJialeStop(fan);
+    return;
+  }
+  if(!nameSlots.length) return;
   Sfx.brake();
   const v = Math.max(vel, .1);
   const natural = (v*v)/(2*BRAKE_A);
@@ -2552,6 +3783,10 @@ function finishRound(){
   vel = 0;
   carZ = stopTargetZ;
   if(carGroup) carGroup.position.z = carZ;
+  if(jialeMode){
+    finishJialeRound();
+    return;
+  }
   const slot = nameSlots[stopTargetIndex];
   winnerSlot = slot || null;
   winnerName = slot ? slot.name : '—';
@@ -2666,7 +3901,21 @@ function updateRace(dt){
     }
 
     // 自动刹停：把最后一次机会留在终点附近，也保证任何时刻都有结果
-    if(nameSlots.length){
+    if(jialeMode){
+      const nat = (vel*vel)/(2*BRAKE_A);
+      let lastFan = null;
+      for(const f of jialeFans){
+        if(f.state !== 'idle') continue;
+        if(!lastFan || f.group.position.z > lastFan.group.position.z) lastFan = f;
+      }
+      if(!lastFan && carZ > trackEnd - 50){
+        lastFan = spawnFinalJialeFan(carZ + Math.max(40, nat + 25));
+      }
+      if(lastFan){
+        const z = lastFan.group.position.z;
+        if(z - carZ <= nat + 8 && z > carZ) beginJialeStop(lastFan, true);
+      }
+    }else if(nameSlots.length){
       const lastZ = nameSlots[nameSlots.length-1].z;
       const nat = (vel*vel)/(2*BRAKE_A);
       if(lastZ - carZ <= nat + 1.5 && carZ < lastZ){
@@ -2725,6 +3974,11 @@ function updateCar(dt){
     g.material.opacity = damp(g.material.opacity, braking ? .95 : .38, 8, dt);
     g.scale.set(braking ? 2.05 : 1.5, braking ? .7 : .55, 1);
   }
+  if(underGlowMesh){
+    const ug = underGlowMesh.material;
+    ug.opacity = damp(ug.opacity, .085 + Math.min(.07, vel*.0012) + (nitroOn ? .05 : 0), 5, dt);
+    ug.color.setHex(jialeMode ? 0xffb36b : 0x35d8ff);
+  }
 
   // 氮气火焰
   const boost = nitroOn && phase === 'running';
@@ -2768,6 +4022,16 @@ function updateCamera(dt){
     px = 2.15; py = 2.0 + sr*.1; pz = carZ - 5.9;
     tx = 0; ty = 1.02; tz = carZ + 4.0;
     k = 3.6; fov = 55 + sr*3;
+  }else if(jialeMode){
+    if(innerWidth / innerHeight < .9){
+      px = 0; py = 3.1; pz = stopTargetZ + 14.2;
+      tx = 0; ty = 2.0; tz = stopTargetZ + 3.4;
+      k = 2.2; fov = 56;
+    }else{
+      px = 6.2; py = 2.9; pz = stopTargetZ + 12.0;
+      tx = 0; ty = 2.0; tz = stopTargetZ + 3.4;
+      k = 2.4; fov = 52;
+    }
   }else{
     if(innerWidth / innerHeight < .9){
       /* 竖屏：正面远景，车与身后的立牌一起入画 */
@@ -2816,6 +4080,13 @@ function updateCamera(dt){
 
 function updateNames(dt){
   if(!nameSlots.length) return;
+  if(jialeMode){
+    for(let i=0;i<nameSlots.length;i++){
+      const m = nameSlots[i].mat;
+      m.opacity += (0 - m.opacity)*Math.min(1, dt*7);
+    }
+    return;
+  }
   const runningOrStopping = phase === 'running' || phase === 'stopping';
   for(let i=0;i<nameSlots.length;i++){
     const slot = nameSlots[i];
@@ -2964,6 +4235,7 @@ const Sfx = (() => {
   let ctx = null, master = null, noiseBuf = null;
   let engine = null, engineAt = 0;
   let lastPassAt = 0;
+  let lastFanHitAt = 0;
   let vol = .1, muted = false;   // 默认 10%，保持很轻的背景音量
   const VOL_KEY = 'race-audio-v1';
   try{
@@ -3133,6 +4405,32 @@ const Sfx = (() => {
       tone(783.99, .75, .028, 'sine', null, .14);
       tone(1046.5, .9, .016, 'sine', null, .24);
     },
+    jialeEnter(){
+      ensure();
+      [392, 523.25, 659.25, 783.99].forEach((f, i)=>tone(f, .5, .03, 'triangle', null, i*.07));
+      whoosh(.5, .03, 500, 3200, .8);
+      hiss(.45, .018, 4500, 9000);
+    },
+    jialeSign(){
+      [523.25, 659.25, 783.99].forEach((f, i)=>tone(f, .36, .03, 'triangle', null, i*.06));
+      tone(1046.5, .5, .02, 'sine', null, .18);
+    },
+    fanHit(){
+      const c = ensure(); if(!c) return;
+      const t = performance.now();
+      if(t - lastFanHitAt < 45) return;
+      lastFanHitAt = t;
+      const p = 240 + Math.random()*160;
+      tone(p, .14, .045, 'square', p*1.7);
+      tone(p*.5, .18, .035, 'triangle', p*.32);
+      whoosh(.12, .02, 800, 1800, 1.2);
+    },
+    jialeReveal(){
+      [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i)=>tone(f, .62, .035, 'triangle', null, i*.08));
+      tone(261.63, .9, .028, 'sine');
+      whoosh(.8, .03, 600, 5200, 1.1);
+      hiss(.6, .022, 5000, 10000);
+    },
     ui(){ tone(660, .07, .018, 'sine', 880); },
     setVolume(v){
       vol = clamp(v, 0, 1);
@@ -3200,6 +4498,8 @@ function tick(now){
   updateCamera(dt);
   updateNames(dt);
   updateEffects(dt);
+  updateSceneExtras(dt);
+  updateJiale(dt);
   updateHUD();
   Sfx.update(clamp(vel/BASE_MAX, 0, 1.7), nitroOn ? 1 : 0);
   if(renderer && scene && camera) renderer.render(scene, camera);
@@ -3297,6 +4597,9 @@ addEventListener('keydown', (e)=>{
 addEventListener('keyup', (e)=>{
   if(e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyN') releaseNitro();
 });
+
+bindJialeTrigger(document.querySelector('.hud-top'));
+bindJialeTrigger(speedo);
 
 /* 可见性 / 尺寸 */
 function bindResize(){
@@ -3444,6 +4747,31 @@ window.__raceDebug = {
     fps: fpsValue ? fpsValue.textContent : '—',
     audio: Sfx.state,
     volume: +Sfx.volume.toFixed(2), muted: Sfx.muted,
+    extras: {
+      moon: !!moonSprite,
+      signs: neonSignMats.length,
+      gates: gateNeonMats.length,
+      dust: !!dustPoints,
+      cones: headlightCones.length,
+      underglow: !!underGlowMesh,
+      roadMarks: roadMarkMeshes.length,
+      sceneChildren: scene ? scene.children.length : 0
+    },
+    jiale: {
+      on: jialeMode,
+      mix: +jialeMix.toFixed(2),
+      fans: jialeFans.length,
+      hit: jialeFans.filter(f=>f.state==='hit').length,
+      sign: !!jialeSignFan,
+      signRaised: !!(jialeSignFan && jialeSignFan.signGroup && jialeSignFan.signGroup.visible),
+      signScreen: jialeSignFan && jialeSignFan.signBoard && camera ? (()=>{
+        const p = jialeSignFan.signBoard.getWorldPosition(new THREE.Vector3()).project(camera);
+        return { x:+p.x.toFixed(2), y:+p.y.toFixed(2), z:+p.z.toFixed(2) };
+      })() : null,
+      decor: !!(jialeDecor && jialeDecor.visible),
+      roadMarksVisible: roadMarkMeshes.filter(m=>m.visible).length,
+      toast: jialeToastEl ? jialeToastEl.textContent : ''
+    },
     ground: winnerSlot ? (()=>{
       const p = winnerSlot.mesh.position.clone().project(camera);
       return { z:+winnerSlot.mesh.position.z.toFixed(2), x:+p.x.toFixed(2), y:+p.y.toFixed(2) };
@@ -3451,6 +4779,9 @@ window.__raceDebug = {
   }),
   start: startRound,
   brake: requestBrake,
+  jialeToggle: toggleJiale,
+  jialeEnter: enterJiale,
+  jialeExit: exitJiale,
   close: closePage
 };
 
