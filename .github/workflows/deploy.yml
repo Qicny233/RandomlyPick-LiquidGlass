@@ -47,6 +47,8 @@ jobs:
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.gitignore' \
+            --exclude='tools' \
+            --exclude='docs' \
             release/ _site/
           if [ -f beta/index.html ]; then
             rsync -a \
@@ -54,6 +56,8 @@ jobs:
               --exclude='.github' \
               --exclude='.gitignore' \
               --exclude='分支' \
+              --exclude='tools' \
+              --exclude='docs' \
               beta/ _site/beta/
           else
             echo "::warning::Beta branch unavailable; deploying release only."
@@ -72,3 +76,21 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      # 部署成功不等于站点正常：用零依赖 HTTP 检查兜住路径、版本、资源错位。
+      # 脚本优先取 main 的副本；main 还没同步 tools/ 时退回 beta 的副本。
+      - name: Smoke test deployed site
+        env:
+          SMOKE_BASE: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          if [ -f beta/index.html ]; then
+            export SMOKE_EXPECT_BETA=1
+          else
+            export SMOKE_EXPECT_BETA=0
+          fi
+          if [ -f release/tools/smoke/check_deploy.mjs ]; then
+            node release/tools/smoke/check_deploy.mjs
+          else
+            node beta/tools/smoke/check_deploy.mjs
+          fi

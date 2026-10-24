@@ -21,8 +21,21 @@
     var base = onBeta
       ? path.slice(0, betaAt + 1)
       : path.slice(0, path.lastIndexOf('/') + 1);
-    if (saved === 'preview' && !onBeta) location.replace(base + 'beta/');
-    else if (saved === 'release' && onBeta) location.replace(base);
+    if (saved === 'preview' && !onBeta) {
+      var go = function () { location.replace(base + 'beta/'); };
+      var fail = function () {
+        try { localStorage.removeItem('rplg_channel_v1'); } catch (e2) { }
+      };
+      /* 跳 Beta 前先确认 /beta/ 真的存在。部署失败或分支被删时清掉选择，
+         避免用户被送进 404 且没有任何入口回正式版。
+         网络异常则保留选择（不把临时断网当成 Beta 消失）。 */
+      if (typeof fetch !== 'function') { go(); return; }
+      fetch('beta/version.json', { method: 'HEAD', cache: 'no-store' })
+        .then(function (r) { if (r.ok) go(); else fail(); })
+        .catch(function () { });
+    } else if (saved === 'release' && onBeta) {
+      location.replace(base);
+    }
   } catch (e) { }
 })();
 </script>
@@ -4417,7 +4430,18 @@ html[data-theme="dark"] #resetDefaultsToast {
   function loadHistory() {
     try {
       var arr = JSON.parse(localStorage.getItem(HISTORY_KEY));
-      return Array.isArray(arr) ? arr : [];
+      if (!Array.isArray(arr)) return [];
+      /* 逐条校验：正式版与 Beta 共用同一个 origin 的 localStorage，
+         任何一条脏数据都丢弃，不让两版的数据结构差异把历史面板打崩。 */
+      var out = [];
+      for (var i = 0; i < arr.length && out.length < MAX_HISTORY; i++) {
+        var it = arr[i];
+        if (!it || typeof it !== 'object') continue;
+        if (typeof it.name !== 'string' || !it.name) continue;
+        if (typeof it.t !== 'number' || !isFinite(it.t)) continue;
+        out.push({ t: it.t, name: it.name });
+      }
+      return out;
     } catch (e) { return []; }
   }
 
