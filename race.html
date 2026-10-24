@@ -1339,36 +1339,31 @@ async function loadNames(){
 function makeMoonTexture(){
   return texFromCanvas(makeCanvas(256,256,(c,w,h)=>{
     c.clearRect(0,0,w,h);
-    const halo = c.createRadialGradient(w/2,h/2,w*.10,w/2,h/2,w*.50);
-    halo.addColorStop(0,'rgba(255,246,222,.34)');
-    halo.addColorStop(.32,'rgba(255,226,186,.14)');
-    halo.addColorStop(1,'rgba(255,210,170,0)');
+    const halo = c.createRadialGradient(w*.40,h*.40,w*.05,w*.40,h*.40,w*.30);
+    halo.addColorStop(0,'rgba(176,208,255,.14)');
+    halo.addColorStop(.55,'rgba(150,190,255,.05)');
+    halo.addColorStop(1,'rgba(130,175,255,0)');
     c.fillStyle = halo; c.fillRect(0,0,w,h);
 
-    const disc = c.createRadialGradient(w*.42,h*.38,w*.02,w*.5,h*.5,w*.27);
-    disc.addColorStop(0,'rgba(255,253,246,1)');
-    disc.addColorStop(.68,'rgba(241,232,216,.96)');
-    disc.addColorStop(1,'rgba(214,204,192,.78)');
-    c.fillStyle = disc;
-    c.beginPath(); c.arc(w/2,h/2,w*.255,0,Math.PI*2); c.fill();
-
-    c.globalAlpha = .13;
-    c.fillStyle = '#8d8176';
-    [[.44,.44,.045],[.56,.53,.060],[.47,.60,.034],[.60,.41,.028],[.51,.34,.022]].forEach((p)=>{
-      c.beginPath(); c.arc(w*p[0],h*p[1],w*p[2],0,Math.PI*2); c.fill();
-    });
-    c.globalAlpha = 1;
+    c.save();
+    c.beginPath(); c.arc(w*.42,h*.42,w*.23,0,Math.PI*2); c.clip();
+    c.fillStyle = '#eaf3ff';
+    c.beginPath(); c.arc(w*.42,h*.42,w*.23,0,Math.PI*2); c.fill();
+    c.globalCompositeOperation = 'destination-out';
+    c.beginPath(); c.arc(w*.53,h*.35,w*.22,0,Math.PI*2); c.fill();
+    c.restore();
+    c.globalCompositeOperation = 'source-over';
   }), true);
 }
 
 function buildSkyDecor(){
   const mat = new THREE.SpriteMaterial({
-    map: makeMoonTexture(), transparent:true, opacity:.92,
-    depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false, fog:false
+    map: makeMoonTexture(), transparent:true, opacity:.78,
+    depthWrite:false, toneMapped:false, fog:false, color:0xbcd7ff
   });
   moonSprite = new THREE.Sprite(mat);
-  moonSprite.scale.set(62,62,1);
-  moonSprite.position.set(-168, 96, carZ + 540);
+  moonSprite.scale.set(34,34,1);
+  moonSprite.position.set(-150, 112, carZ + 540);
   moonSprite.renderOrder = -2;
   scene.add(moonSprite);
 }
@@ -2011,7 +2006,7 @@ function createJialeFan(index){
   shadow.rotation.x = -Math.PI/2;
   shadow.position.y = .013;
 
-  g.scale.setScalar(.92 + Math.random()*.28);
+  g.scale.setScalar(1.32 + Math.random()*.30);
 
   return {
     group:g, bodyGroup, shadow, armL, armR, head,
@@ -2023,6 +2018,27 @@ function createJialeFan(index){
   };
 }
 
+function makeJialeBubbleTexture(){
+  return texFromCanvas(makeCanvas(256,128,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    const bg = c.createLinearGradient(0,0,w,h);
+    bg.addColorStop(0,'rgba(255,248,236,.97)');
+    bg.addColorStop(1,'rgba(255,224,196,.94)');
+    c.fillStyle = bg;
+    roundRect(c, 8, 8, w-16, h-32, 26); c.fill();
+    c.beginPath();
+    c.moveTo(w*.40,h-24); c.lineTo(w*.47,h-4); c.lineTo(w*.55,h-24); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(120,60,60,.30)'; c.lineWidth = 2;
+    roundRect(c, 8, 8, w-16, h-32, 26); c.stroke();
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillStyle='#58201f';
+    c.font='800 42px "PingFang SC","Microsoft YaHei",sans-serif';
+    c.fillText('别撞我！', w/2, h*.40);
+    c.fillStyle='rgba(120,60,60,.65)';
+    c.font='600 16px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    spacedText(c,'WAIT WAIT', w/2, h*.64, 2);
+  }), true);
+}
 function attachJialeSign(fan){
   if(fan.signGroup) return fan.signGroup;
   const geo = getJialeFanGeo();
@@ -2031,25 +2047,38 @@ function attachJialeSign(fan){
     map:tex, transparent:true, side:THREE.DoubleSide,
     toneMapped:false, depthWrite:false
   }));
-  board.position.set(0,2.55,.16);
+  board.position.set(0,0,0);
   const stick = new THREE.Mesh(geo.signStick, new THREE.MeshStandardMaterial({
     color:0x8a5a36, roughness:.6
   }));
-  stick.position.set(0,1.78,.10);
+  stick.position.set(0,-.72,0);
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
     map:glowTex, color:0xffc06a, transparent:true, opacity:.25,
     depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
   }));
   glow.scale.set(3.4,2.3,1);
-  glow.position.set(0,2.5,.04);
+  glow.position.set(0,0,.02);
   const sg = new THREE.Group();
   sg.add(stick, board, glow);
   sg.visible = false;
-  sg.scale.setScalar(.2);
+  sg.scale.setScalar(.15);
+  sg.position.set(0,1.0,-.2);
   fan.group.add(sg);
   fan.signGroup = sg;
   fan.signBoard = board;
   fan.signGlow = glow.material;
+
+  const bubbleMat = new THREE.SpriteMaterial({
+    map: makeJialeBubbleTexture(), transparent:true, opacity:0,
+    depthWrite:false, toneMapped:false
+  });
+  const bubble = new THREE.Sprite(bubbleMat);
+  bubble.scale.set(1.8,.9,1);
+  bubble.position.set(0,2.15,.08);
+  bubble.visible = false;
+  fan.group.add(bubble);
+  fan.bubble = bubble;
+  fan.bubbleMat = bubbleMat;
   return sg;
 }
 
@@ -2072,6 +2101,7 @@ function spawnJialeFans(){
     fan.homeZ = z;
     jialeFanGroup.add(fan.group);
     jialeFanGroup.add(fan.shadow);
+    fan.shadow.scale.setScalar(fan.group.scale.x * 1.05);
     fan.shadow.position.set(x, .013, z);
     jialeFans.push(fan);
   }
@@ -2089,6 +2119,7 @@ function spawnFinalJialeFan(z){
   }
   jialeFanGroup.add(fan.group);
   jialeFanGroup.add(fan.shadow);
+  fan.shadow.scale.setScalar(fan.group.scale.x * 1.05);
   fan.shadow.position.set(.7, .013, z);
   jialeFans.push(fan);
   return fan;
@@ -2156,14 +2187,17 @@ function beginJialeStop(fan, auto){
 
 function raiseJialeSign(fan){
   attachJialeSign(fan);
-  fan.signGroup.visible = true;
+  fan.signGroup.visible = false;
   fan.signT = 0;
-  Sfx.jialeSign();
-  if(burst) burst.spawn(fan.group.position.x, 2.4, fan.group.position.z, IS_MOBILE?32:55,
-    [[1,.8,.4],[1,.6,.7],[1,1,1],[.7,.9,1]], 7);
-  if(jialeConfetti) jialeConfetti.spawn(fan.group.position.x, 3.0, fan.group.position.z,
-    IS_MOBILE?50:90, JIALE_PALETTE, 6);
-  showJialeToast('最后一个小人 · 周佳乐');
+  fan.signSfx = false;
+  fan.bubble.visible = true;
+  fan.bubbleMat.opacity = 0;
+  Sfx.jialePlead();
+  if(burst) burst.spawn(fan.group.position.x, 2.4, fan.group.position.z, IS_MOBILE?20:35,
+    [[1,.8,.4],[1,.6,.7],[1,1,1],[.7,.9,1]], 6);
+  if(jialeConfetti) jialeConfetti.spawn(fan.group.position.x, 2.4, fan.group.position.z,
+    IS_MOBILE?24:40, JIALE_PALETTE, 4);
+  showJialeToast('最后一个小人 · 别撞我！');
 }
 
 function knockJialeFan(fan){
@@ -2383,20 +2417,65 @@ function updateJiale(dt){
       if(f.fleeT > 1.4) f.group.visible = false;
     }else if(f.state === 'sign'){
       f.signT += dt;
-      const e = easeOutCubic(clamp(f.signT / .55, 0, 1));
-      f.armR.rotation.x = lerp(f.baseRX, -2.62, e);
-      f.armR.rotation.z = lerp(f.baseRZ, -.28, e);
-      f.armL.rotation.x = lerp(f.baseLX, -2.2, e);
-      f.armL.rotation.z = lerp(f.baseLZ, .5, e);
+      const t = f.signT;
+      const celebrating = f.turnT !== null && f.turnT !== undefined;
+      const plead = easeOutCubic(clamp(t / .28, 0, 1));
+      const draw = easeOutCubic(clamp((t - .65) / .35, 0, 1));
+      const offer = easeOutCubic(clamp((t - 1.0) / .35, 0, 1));
+
+      if(!celebrating){
+        f.armL.rotation.x = lerp(f.baseLX, -1.45, Math.max(plead, offer));
+        f.armR.rotation.x = lerp(f.baseRX, -1.45, Math.max(plead, offer));
+        f.armL.rotation.z = lerp(f.baseLZ, .38, plead);
+        f.armR.rotation.z = lerp(f.baseRZ, -.38, plead);
+      }
+      f.bodyGroup.rotation.x = lerp(-.10, .12, offer);
+      f.head.rotation.y = t < .65 ? Math.sin(t * 34) * .16 : 0;
+
+      if(f.bubble){
+        f.bubble.visible = !celebrating && t < 1.15;
+        f.bubbleMat.opacity = damp(f.bubbleMat.opacity, f.bubble.visible ? .92 : 0, 8, dt);
+        f.bubble.position.y = 2.15 + Math.sin(idleT * 5) * .03;
+      }
+
       if(f.signGroup){
-        f.signGroup.visible = true;
-        const se = easeOutBack(clamp((f.signT - .08) / .55, 0, 1));
-        f.signGroup.scale.setScalar(.2 + .8 * se);
-        f.signGroup.position.y = Math.sin(idleT * 4) * .025;
+        f.signGroup.visible = t >= .65;
+        if(t < .65){
+          f.signGroup.scale.setScalar(.1);
+          f.signGroup.position.set(0,1.0,-.2);
+          f.signGroup.rotation.z = .7;
+        }else if(t < 1.15){
+          const k = draw;
+          f.signGroup.scale.setScalar(lerp(.1,1,easeOutBack(clamp((t-.65)/.5,0,1))));
+          f.signGroup.position.set(0, lerp(1.0,1.55,k), lerp(-.2,.62,k));
+          f.signGroup.rotation.z = lerp(.7,0,k);
+          if(!f.signSfx){
+            f.signSfx = true;
+            Sfx.jialeSign();
+            showJialeToast('周佳乐 · 给你给你！');
+            if(jialeConfetti) jialeConfetti.spawn(f.group.position.x, 2.0, f.group.position.z,
+              IS_MOBILE?30:55, JIALE_PALETTE, 5);
+          }
+        }else{
+          f.signGroup.scale.setScalar(1);
+          f.signGroup.position.set(0, 1.55 + Math.sin(idleT * 4) * .02, .62);
+          f.signGroup.rotation.z = 0;
+        }
         if(f.signGlow) f.signGlow.opacity = .18 + .10 * Math.sin(idleT * 3.4);
       }
-      f.bodyGroup.position.y = Math.abs(Math.sin(f.signT * 7)) * .05;
-      if(f.turnT !== null && f.turnT !== undefined){
+
+      f.bodyGroup.position.y = Math.abs(Math.sin(t * 7)) * .04;
+      if(celebrating){
+        const e = easeOutCubic(clamp(f.turnT / .55, 0, 1));
+        if(f.signGroup){
+          f.signGroup.position.set(0, lerp(1.55,2.15,e), lerp(.62,.35,e));
+          f.signGroup.scale.setScalar(lerp(1,1.06,e));
+        }
+        f.armR.rotation.x = lerp(-1.45,-2.6,e);
+        f.armL.rotation.x = lerp(-1.45,-2.2,e);
+        f.armR.rotation.z = lerp(-.38,-.2,e);
+        f.armL.rotation.z = lerp(.38,.5,e);
+        f.bubble.visible = false;
         f.turnT += dt;
         const tt = easeInOutCubic(clamp(f.turnT / .55, 0, 1));
         const targetAng = camera ? Math.atan2(
@@ -4411,6 +4490,12 @@ const Sfx = (() => {
       whoosh(.5, .03, 500, 3200, .8);
       hiss(.45, .018, 4500, 9000);
     },
+    jialePlead(){
+      ensure();
+      tone(320, .16, .03, 'triangle', 260);
+      tone(480, .12, .02, 'sine', 380, .10);
+      whoosh(.18, .018, 500, 1200, 1.4);
+    },
     jialeSign(){
       [523.25, 659.25, 783.99].forEach((f, i)=>tone(f, .36, .03, 'triangle', null, i*.06));
       tone(1046.5, .5, .02, 'sine', null, .18);
@@ -4768,6 +4853,9 @@ window.__raceDebug = {
         const p = jialeSignFan.signBoard.getWorldPosition(new THREE.Vector3()).project(camera);
         return { x:+p.x.toFixed(2), y:+p.y.toFixed(2), z:+p.z.toFixed(2) };
       })() : null,
+      signT: jialeSignFan ? +(jialeSignFan.signT || 0).toFixed(2) : null,
+      bubble: !!(jialeSignFan && jialeSignFan.bubble && jialeSignFan.bubble.visible),
+      fanScale: jialeFans.length ? +jialeFans[0].group.scale.x.toFixed(2) : null,
       decor: !!(jialeDecor && jialeDecor.visible),
       roadMarksVisible: roadMarkMeshes.filter(m=>m.visible).length,
       toast: jialeToastEl ? jialeToastEl.textContent : ''
