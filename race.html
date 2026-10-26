@@ -121,6 +121,34 @@ button{ font-family:inherit; color:inherit; }
 .hud-meta #fpsValue{ min-width:2ch; text-align:right; }
 .hud-meta #fpsValue.warn{ color:#dcc59f; }
 .hud-meta #fpsValue.bad{ color:#d99ba3; }
+.perf-line{
+  margin-top:9px; padding-top:7px;
+  border-top:1px solid rgba(150,192,216,.09);
+  font-family:var(--mono); font-size:7.5px; line-height:1.35;
+  letter-spacing:.2px; color:#657d8f; white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.perf-line[data-tier="medium"]{ color:#7f9a9e; }
+.perf-line[data-tier="low"]{ color:#b39b7b; }
+body.perf-low .speedlines,
+body.perf-low #boostfx,
+body.perf-low #jialeGlow{ display:none !important; }
+body.perf-low .hud-brand .brand-dot{ animation:none; box-shadow:none; }
+body.perf-low .start-btn::after{ animation:none; }
+body.perf-low .dial-arc,
+body.perf-low .dial-needle line,
+body.perf-low .dial-needle circle{ filter:none; }
+body.perf-low .speedo,
+body.perf-low .hud-meta,
+body.perf-low .hud-audio,
+body.perf-low .load-card,
+body.perf-low .turn-btn{
+  backdrop-filter:blur(10px) saturate(1.05);
+  -webkit-backdrop-filter:blur(10px) saturate(1.05);
+}
+@media (max-width:760px){
+  .perf-line{ font-size:6.5px; margin-top:7px; padding-top:6px; }
+}
 
 /* ---------- 音量控件（低调，悬停/聚焦时浮现） ---------- */
 .hud-audio{
@@ -773,6 +801,7 @@ body[data-phase="crash"] .hud-brand .brand-dot{ background:#ff7a6a; }
       <div class="nitro-head"><span><i class="bolt">ϟ</i> NITRO</span><b id="nitroPct">60%</b></div>
       <div class="nitro-track"><i id="nitroFill"></i></div>
     </div>
+    <div id="perfLine" class="perf-line" data-tier="high">Performance：—｜AutoAdjust：On</div>
   </aside>
 
   <button id="turnBtn" class="turn-btn" type="button" aria-label="限时拐弯">
@@ -854,6 +883,7 @@ const RESULT_SUB_DEFAULT = resultSubEl ? resultSubEl.textContent : '';
 const turnBtnEl = $('turnBtn');
 const turnBtnBarEl = turnBtnEl ? turnBtnEl.querySelector('.turn-bar i') : null;
 const crashFlashEl = $('crashFlash');
+const perfLineEl = $('perfLine');
 
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 const IS_MOBILE = isTouch || Math.min(innerWidth, innerHeight) < 700;
@@ -865,6 +895,274 @@ const smoothstep = (a,b,x) => { const t = clamp((x-a)/(b-a), 0, 1); return t*t*(
 const easeOutCubic = (t) => 1 - Math.pow(1-t, 3);
 const easeInOutCubic = (t) => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
 const damp = (a,b,lambda,dt) => lerp(a, b, 1 - Math.exp(-lambda*dt));
+/* ============================================================
+   性能自动适配：能力探测 / 静默帧率采样 / 动态分级降载
+   ============================================================ */
+const PERF_LEVELS = ['low', 'medium', 'high'];
+const PERF_LABEL = { high:'High', medium:'Medium', low:'Low' };
+const PERF = {
+  tier:'high', capTier:'high', mode:'auto', autoAdjust:true,
+  useWebGL1:false, cap:null, evalActive:false, evalDone:true,
+  evalWindows:[], avgFps:0, lowSince:0, lastDowngradeAt:0,
+  maxFps:0, effectScale:1, lastFrameAt:0, reason:'initial'
+};
+let perfEvalTimer = null;
+let parentCompatMode = null;
+let parentTierHint = null;
+
+function perfRank(tier){ return PERF_LEVELS.indexOf(tier); }
+function perfLow(){ return PERF.tier === 'low'; }
+function perfMedium(){ return PERF.tier === 'medium'; }
+function perfShadows(){ return PERF.tier === 'high'; }
+function perfGlow(){ return PERF.tier !== 'low'; }
+function perfEffectScale(){
+  return PERF.tier === 'low' ? 0 : PERF.tier === 'medium' ? .55 : 1;
+}
+function perfStored(key){
+  try{ return localStorage.getItem(key); }catch(e){ return null; }
+}
+function readCompatMode(){
+  if(parentCompatMode === 'auto' || parentCompatMode === 'on' || parentCompatMode === 'off'){
+    return parentCompatMode;
+  }
+  const mode = perfStored('lg_compat_mode_v1');
+  if(mode === 'auto' || mode === 'on' || mode === 'off') return mode;
+  return perfStored('lg_compat_v1') === '1' ? 'on' : 'auto';
+}
+function readPerfTierHint(){
+  if(PERF_LEVELS.includes(parentTierHint)) return parentTierHint;
+  const v = perfStored('lg_perf_tier_v1');
+  return PERF_LEVELS.includes(v) ? v : null;
+}
+function perfQueryOverride(){
+  try{
+    const v = new URLSearchParams(location.search).get('perf');
+    return PERF_LEVELS.includes(v) ? v : null;
+  }catch(e){ return null; }
+}
+function probePerfCapabilities(){
+  const cap = {
+    supported:false, webglVersion:0, renderer:'', vendor:'',
+    maxTexture:0, cores:navigator.hardwareConcurrency || 0,
+    memory:navigator.deviceMemory || 0, dpr:devicePixelRatio || 1
+  };
+  try{
+    const cv = document.createElement('canvas');
+    let gl = null;
+    try{
+      gl = cv.getContext('webgl2', { antialias:false, alpha:false, powerPreference:'high-performance' });
+      if(gl) cap.webglVersion = 2;
+    }catch(e){}
+    if(!gl){
+      try{
+        gl = cv.getContext('webgl', { antialias:false, alpha:false })
+          || cv.getContext('experimental-webgl', { antialias:false, alpha:false });
+        if(gl) cap.webglVersion = 1;
+      }catch(e){}
+    }
+    if(!gl) return cap;
+    cap.supported = true;
+    try{
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      cap.renderer = String((ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) || '');
+      cap.vendor = String((ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR)) || '');
+    }catch(e){}
+    try{ cap.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0; }catch(e){}
+    try{
+      const lose = gl.getExtension('WEBGL_lose_context');
+      if(lose) lose.loseContext();
+    }catch(e){}
+  }catch(e){}
+  return cap;
+}
+function classifyPerfTier(cap){
+  if(!cap || !cap.supported) return 'low';
+  const name = ((cap.renderer || '') + ' ' + (cap.vendor || '')).toLowerCase();
+  const cores = cap.cores || 0;
+  const memory = cap.memory || 0;
+  const tex = cap.maxTexture || 0;
+  if(cap.webglVersion < 2) return 'low';
+  if(/swiftshader|llvmpipe|softpipe|software|basic render|warp|mesa offscreen/.test(name)) return 'low';
+  if(tex && tex < 4096) return 'low';
+  if((cores && cores <= 2) || (memory && memory <= 2)) return 'low';
+  if(/nvidia|geforce|rtx|gtx|quadro|tesla|radeon rx|radeon pro|radeon vii|apple m\d|apple gpu|intel arc|arc a\d/.test(name)) return 'high';
+  if(/intel|uhd|iris|hd graphics|mali|adreno|powervr|radeon|vega/.test(name)){
+    if(cores >= 8 && (!memory || memory >= 8) && (!tex || tex >= 8192)) return 'medium';
+    return 'low';
+  }
+  if(cores >= 8 && (!tex || tex >= 8192)) return 'medium';
+  return 'low';
+}
+function perfPixelRatio(){
+  const raw = Math.max(1, devicePixelRatio || 1);
+  if(PERF.tier === 'high') return Math.min(raw, IS_MOBILE ? 1.65 : 2);
+  const w = Math.max(1, innerWidth), h = Math.max(1, innerHeight);
+  const maxPixels = PERF.tier === 'low' ? 1280 * 720 : 2560 * 1440;
+  let ratio = Math.min(raw, PERF.tier === 'low' ? .8 : 1.35);
+  if(w * h * ratio * ratio > maxPixels) ratio = Math.sqrt(maxPixels / (w * h));
+  ratio = Math.max(PERF.tier === 'low' ? .5 : .65, ratio);
+  return Math.round(ratio * 100) / 100;
+}
+function updatePerfBadge(){
+  if(!perfLineEl) return;
+  perfLineEl.textContent = 'Performance：' + PERF_LABEL[PERF.tier]
+    + '｜AutoAdjust：' + (PERF.mode === 'auto' ? 'On' : 'Off');
+  perfLineEl.dataset.tier = PERF.tier;
+}
+function notifyPerfParent(reason){
+  if(PERF.mode === 'auto'){
+    try{
+      localStorage.setItem('lg_perf_tier_v1', PERF.tier);
+      localStorage.setItem('lg_compat_auto_v1', PERF.tier === 'high' ? '0' : '1');
+    }catch(e){}
+  }
+  try{
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage({
+        type:'race-perf',
+        tier:PERF.tier,
+        capTier:PERF.capTier,
+        autoAdjust:PERF.mode === 'auto',
+        compatOn:PERF.tier !== 'high',
+        webgl:PERF.cap ? PERF.cap.webglVersion : 0,
+        renderer:PERF.cap ? PERF.cap.renderer : '',
+        avgFps:PERF.avgFps || null,
+        reason:reason || ''
+      }, '*');
+    }
+  }catch(e){}
+}
+function initPerformanceState(){
+  PERF.cap = probePerfCapabilities();
+  PERF.mode = readCompatMode();
+  PERF.capTier = classifyPerfTier(PERF.cap);
+  const hint = readPerfTierHint();
+  let tier;
+  if(PERF.mode === 'on') tier = 'low';
+  else if(PERF.mode === 'off') tier = PERF.cap.supported ? 'high' : 'low';
+  else{
+    tier = PERF.capTier;
+    if(hint === 'low' || (hint === 'medium' && tier === 'high')) tier = hint;
+  }
+  const forced = perfQueryOverride();
+  if(forced){
+    tier = forced;
+    PERF.mode = 'off';
+  }
+  PERF.tier = tier;
+  PERF.autoAdjust = PERF.mode === 'auto';
+  PERF.evalDone = PERF.mode !== 'auto';
+  PERF.useWebGL1 = !!PERF.cap.supported
+    && (PERF.cap.webglVersion < 2 || (PERF.capTier === 'low' && tier === 'low'));
+  PERF.maxFps = tier === 'low' ? 60 : 0;
+  PERF.effectScale = perfEffectScale();
+  document.body.dataset.perfTier = tier;
+  document.body.classList.toggle('perf-low', tier === 'low');
+  document.body.classList.toggle('perf-medium', tier === 'medium');
+  updatePerfBadge();
+  notifyPerfParent('initial');
+}
+function refreshPerfRuntime(){
+  if(!renderer) return;
+  renderer.setPixelRatio(perfPixelRatio());
+  renderer.setSize(innerWidth, innerHeight);
+  const shadows = PERF.tier === 'high';
+  if(renderer.shadowMap) renderer.shadowMap.enabled = shadows;
+  if(sunLight){
+    sunLight.castShadow = shadows;
+    if(!shadows && sunLight.shadow && sunLight.shadow.map){
+      sunLight.shadow.map.dispose();
+      sunLight.shadow.map = null;
+    }
+  }
+  if(scene){
+    if(PERF.tier === 'low') scene.environment = null;
+    else if(envRT) scene.environment = envRT.texture;
+  }
+  const glowOn = PERF.tier !== 'low';
+  if(dustPoints) dustPoints.visible = glowOn;
+  if(cityLampPoints) cityLampPoints.visible = glowOn;
+  if(underGlowMesh) underGlowMesh.visible = glowOn;
+  if(nitroRearLight) nitroRearLight.visible = glowOn;
+  headlightCones.forEach(m => { m.visible = glowOn; });
+  tailGlows.forEach(g => { g.visible = glowOn; });
+  startLightGlows.forEach(g => { g.visible = glowOn; });
+  headlightSpots.forEach(l => { l.visible = glowOn; });
+  neonSignMats.forEach(s => { if(s.glow) s.glow.visible = glowOn; });
+  jialeLanterns.forEach(l => { if(l.sprite) l.sprite.visible = glowOn; });
+  jialeSpotlights.forEach(s => { if(s.light) s.light.visible = glowOn; });
+  abstractProps.forEach((p, i) => { p.mesh.visible = glowOn || i < 3; });
+}
+function setPerfTier(tier, reason){
+  if(!PERF_LEVELS.includes(tier) || tier === PERF.tier) return false;
+  PERF.tier = tier;
+  PERF.reason = reason || 'change';
+  PERF.maxFps = tier === 'low' ? 60 : 0;
+  PERF.effectScale = perfEffectScale();
+  document.body.dataset.perfTier = tier;
+  document.body.classList.toggle('perf-low', tier === 'low');
+  document.body.classList.toggle('perf-medium', tier === 'medium');
+  refreshPerfRuntime();
+  updatePerfBadge();
+  notifyPerfParent(reason);
+  return true;
+}
+function downgradePerf(reason){
+  if(PERF.tier === 'high') return setPerfTier('medium', reason);
+  if(PERF.tier === 'medium') return setPerfTier('low', reason);
+  return false;
+}
+function startPerfEvaluation(){
+  clearTimeout(perfEvalTimer);
+  PERF.evalWindows = [];
+  PERF.evalActive = false;
+  if(PERF.mode !== 'auto'){ PERF.evalDone = true; return; }
+  PERF.evalDone = false;
+  const begin = () => {
+    if(disposed || PERF.mode !== 'auto') return;
+    if(document.hidden){
+      perfEvalTimer = setTimeout(begin, 900);
+      return;
+    }
+    PERF.evalActive = true;
+    PERF.evalWindows = [];
+  };
+  perfEvalTimer = setTimeout(begin, 1200);
+}
+function finishPerfEvaluation(){
+  const list = PERF.evalWindows.slice();
+  PERF.evalWindows = [];
+  PERF.evalActive = false;
+  PERF.evalDone = true;
+  if(!list.length) return;
+  let sum = 0;
+  for(const v of list) sum += v;
+  const avg = Math.round(sum / list.length);
+  PERF.avgFps = avg;
+  let target = PERF.tier;
+  if(avg < 34) target = 'low';
+  else if(avg < 50 && PERF.tier === 'high') target = 'medium';
+  if(perfRank(target) < perfRank(PERF.tier)) setPerfTier(target, 'initial-fps');
+  else{
+    updatePerfBadge();
+    notifyPerfParent('initial-fps');
+  }
+}
+function monitorPerfWindow(fps, now){
+  if(PERF.mode !== 'auto' || !PERF.evalDone || PERF.evalActive) return;
+  if(PERF.tier === 'low'){ PERF.lowSince = 0; return; }
+  if(fps < 45){
+    if(!PERF.lowSince) PERF.lowSince = now;
+    if(now - PERF.lowSince >= 5500 && now - PERF.lastDowngradeAt >= 6000){
+      PERF.lowSince = 0;
+      PERF.lastDowngradeAt = now;
+      downgradePerf('sustained-low-fps');
+    }
+  }else if(fps >= 52){
+    PERF.lowSince = 0;
+  }
+}
+
 const nowSec = () => performance.now()/1000;
 
 let names = [];
@@ -1026,7 +1324,7 @@ function makeGlowTexture(){
 
 /* 天空 / 环境反射贴图（equirectangular，太阳在 +Z 方位） */
 function makeSkyTexture(){
-  const SW = IS_MOBILE ? 1024 : 2048;
+  const SW = PERF.tier === 'low' ? 512 : (IS_MOBILE || PERF.tier === 'medium') ? 1024 : 2048;
   return texFromCanvas(makeCanvas(SW,SW/2,(c,w,h)=>{
     const g = c.createLinearGradient(0,0,0,h);
     g.addColorStop(0,'#01040a');
@@ -1167,7 +1465,7 @@ function makeRoughnessTexture(){
 /* 名字路面贴图 */
 function makeNameTexture(text){
   /* 手机上 66 张路面名字贴图是大头，降一档分辨率换启动速度 */
-  const W = IS_MOBILE ? 512 : 768, H = W/4;
+  const W = PERF.tier === 'low' ? 384 : (IS_MOBILE || PERF.tier === 'medium') ? 512 : 768, H = W/4;
   const cv = makeCanvas(W,H,(c)=>{
     c.clearRect(0,0,W,H);
     const family = '"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
@@ -1387,8 +1685,14 @@ function getParentNames(){
     function cleanup(){ removeEventListener('message', onMsg); clearTimeout(timer); }
     function onMsg(e){
       if(e.source !== window.parent) return;
-      if(e.data && e.data.type === 'race-names' && Array.isArray(e.data.names) && e.data.names.length){
-        done = true; cleanup(); resolve(e.data.names.map(String));
+      if(e.data && e.data.type === 'race-names'){
+        if(e.data.compatMode === 'auto' || e.data.compatMode === 'on' || e.data.compatMode === 'off'){
+          parentCompatMode = e.data.compatMode;
+        }
+        if(PERF_LEVELS.includes(e.data.perfTier)) parentTierHint = e.data.perfTier;
+        if(Array.isArray(e.data.names) && e.data.names.length){
+          done = true; cleanup(); resolve(e.data.names.map(String));
+        }
       }
     }
     timer = setTimeout(()=>{ if(!done){ cleanup(); resolve(null); } }, 1200);
@@ -1514,10 +1818,12 @@ function buildNeonSigns(){
       map:glowTex, color:new THREE.Color(d.color), transparent:true, opacity:.16,
       depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false, fog:false
     }));
-    glow.scale.set(13, 7.5, 1);
-    glow.position.set(d.x + cx, d.y, d.z - .25);
-    scene.add(glow);
-    neonSignMats.push({ mat, glow:glow.material, phase:i*1.7 });
+    if(PERF.tier !== 'low'){
+      glow.scale.set(13, 7.5, 1);
+      glow.position.set(d.x + cx, d.y, d.z - .25);
+      scene.add(glow);
+      neonSignMats.push({ mat, glow:glow.material, phase:i*1.7 });
+    }
   });
 }
 
@@ -1530,7 +1836,8 @@ function buildLightGates(){
     map:bannerTex, transparent:true, side:THREE.DoubleSide,
     toneMapped:false, depthWrite:false
   });
-  const count = Math.max(1, Math.min(7, Math.floor((roadEnd-120)/150)));
+  const gateMax = PERF.tier === 'low' ? 3 : 7;
+  const count = Math.max(1, Math.min(gateMax, Math.floor((roadEnd-120)/150)));
   for(let i=0;i<count;i++){
     const z = 120 + i*150;
     if(z > roadEnd - 40) break;
@@ -1556,15 +1863,17 @@ function buildLightGates(){
     banner.rotation.y = Math.PI;
     g.add(banner);
 
-    const bulbPos = [];
-    for(let k=0;k<25;k++) bulbPos.push(-8 + k*.665, 5.98, .15);
-    const bulbGeo = new THREE.BufferGeometry();
-    bulbGeo.setAttribute('position', new THREE.Float32BufferAttribute(bulbPos,3));
-    const bulbs = new THREE.Points(bulbGeo, new THREE.PointsMaterial({
-      map:glowTex, color:0xffe5b8, size:.52, transparent:true, opacity:.66,
-      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
-    }));
-    g.add(bulbs);
+    if(PERF.tier !== 'low'){
+      const bulbPos = [];
+      for(let k=0;k<25;k++) bulbPos.push(-8 + k*.665, 5.98, .15);
+      const bulbGeo = new THREE.BufferGeometry();
+      bulbGeo.setAttribute('position', new THREE.Float32BufferAttribute(bulbPos,3));
+      const bulbs = new THREE.Points(bulbGeo, new THREE.PointsMaterial({
+        map:glowTex, color:0xffe5b8, size:.52, transparent:true, opacity:.66,
+        depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+      }));
+      g.add(bulbs);
+    }
 
     g.position.set(trackX(z), 0, z);
     g.rotation.y = trackAngle(z);
@@ -1574,7 +1883,8 @@ function buildLightGates(){
 }
 
 function buildDust(){
-  const N = IS_MOBILE ? 120 : 240;
+  if(PERF.tier === 'low') return;
+  const N = PERF.tier === 'medium' ? (IS_MOBILE ? 72 : 130) : (IS_MOBILE ? 120 : 240);
   const pos = new Float32Array(N*3);
   const seed = new Float32Array(N*2);
   for(let i=0;i<N;i++){
@@ -1597,7 +1907,7 @@ function buildDust(){
 }
 
 function buildHeadlightCones(){
-  if(!carGroup) return;
+  if(!carGroup || PERF.tier === 'low') return;
   const beamTex = texFromCanvas(makeCanvas(64,256,(c,w,h)=>{
     const g = c.createLinearGradient(0,0,0,h);
     g.addColorStop(0,'rgba(190,240,255,0)');
@@ -1644,7 +1954,7 @@ function updateSceneExtras(dt){
     s.mat.opacity = .82 + .17*pulse;
   }
 
-  if(dustPoints){
+  if(dustPoints && PERF.tier !== 'low'){
     const p = dustPos;
     for(let i=0;i<p.length/3;i++){
       const ph = dustSeed[i*2];
@@ -1676,39 +1986,42 @@ function easeOutBack(t){
 
 function getJialeFanGeo(){
   if(jialeFanGeo) return jialeFanGeo;
+  const L = PERF.tier === 'low';
+  const M = PERF.tier === 'medium';
+  const seg = (n) => Math.max(5, Math.round(n * (L ? .55 : M ? .8 : 1)));
   jialeFanGeo = {
-    head: new THREE.SphereGeometry(.205, 20, 16),
-    neck: new THREE.CylinderGeometry(.065,.075,.13,10),
-    torso: new THREE.CylinderGeometry(.205,.165,.50,16,1),
-    hips: new THREE.SphereGeometry(.17,14,10),
-    collar: new THREE.TorusGeometry(.115,.022,6,16),
-    belt: new THREE.TorusGeometry(.172,.018,6,18),
-    upperArm: new THREE.CapsuleGeometry(.052,.20,4,10),
-    foreArm: new THREE.CapsuleGeometry(.046,.18,4,10),
-    hand: new THREE.SphereGeometry(.055,10,8),
-    finger: new THREE.CapsuleGeometry(.010,.045,3,6),
-    thumb: new THREE.CapsuleGeometry(.012,.038,3,6),
-    thigh: new THREE.CapsuleGeometry(.072,.24,4,10),
-    calf: new THREE.CapsuleGeometry(.058,.22,4,10),
+    head: new THREE.SphereGeometry(.205, seg(20), seg(16)),
+    neck: new THREE.CylinderGeometry(.065,.075,.13,seg(10)),
+    torso: new THREE.CylinderGeometry(.205,.165,.50,seg(16),1),
+    hips: new THREE.SphereGeometry(.17,seg(14),seg(10)),
+    collar: new THREE.TorusGeometry(.115,.022,seg(6),seg(16)),
+    belt: new THREE.TorusGeometry(.172,.018,seg(6),seg(18)),
+    upperArm: new THREE.CapsuleGeometry(.052,.20,4,seg(10)),
+    foreArm: new THREE.CapsuleGeometry(.046,.18,4,seg(10)),
+    hand: new THREE.SphereGeometry(.055,seg(10),seg(8)),
+    finger: new THREE.CapsuleGeometry(.010,.045,3,seg(6)),
+    thumb: new THREE.CapsuleGeometry(.012,.038,3,seg(6)),
+    thigh: new THREE.CapsuleGeometry(.072,.24,4,seg(10)),
+    calf: new THREE.CapsuleGeometry(.058,.22,4,seg(10)),
     shoe: new THREE.BoxGeometry(.13,.070,.24),
     sole: new THREE.BoxGeometry(.14,.022,.26),
     brim: new THREE.BoxGeometry(.26,.025,.13),
     bridge: new THREE.BoxGeometry(.04,.008,.01),
-    ear: new THREE.SphereGeometry(.043,8,6),
-    nose: new THREE.ConeGeometry(.028,.06,8),
+    ear: new THREE.SphereGeometry(.043,seg(8),seg(6)),
+    nose: new THREE.ConeGeometry(.028,.06,seg(8)),
     brow: new THREE.BoxGeometry(.055,.012,.014),
-    eyeWhite: new THREE.SphereGeometry(.032,10,8),
-    pupil: new THREE.SphereGeometry(.016,8,6),
-    mouth: new THREE.TorusGeometry(.040,.008,5,12,Math.PI),
-    hair: new THREE.SphereGeometry(.212,18,10,0,Math.PI*2,0,Math.PI*.52),
-    fringe: new THREE.SphereGeometry(.10,10,6,0,Math.PI*2,0,Math.PI*.5),
-    hat: new THREE.ConeGeometry(.14,.24,12),
-    cap: new THREE.SphereGeometry(.19,14,8,0,Math.PI*2,0,Math.PI*.5),
-    glasses: new THREE.TorusGeometry(.055,.008,6,12),
-    sweat: new THREE.SphereGeometry(.035,8,6),
-    shadow: new THREE.CircleGeometry(.60,20),
+    eyeWhite: new THREE.SphereGeometry(.032,seg(10),seg(8)),
+    pupil: new THREE.SphereGeometry(.016,seg(8),seg(6)),
+    mouth: new THREE.TorusGeometry(.040,.008,seg(5),seg(12),Math.PI),
+    hair: new THREE.SphereGeometry(.212,seg(18),seg(10),0,Math.PI*2,0,Math.PI*.52),
+    fringe: new THREE.SphereGeometry(.10,seg(10),seg(6),0,Math.PI*2,0,Math.PI*.5),
+    hat: new THREE.ConeGeometry(.14,.24,seg(12)),
+    cap: new THREE.SphereGeometry(.19,seg(14),seg(8),0,Math.PI*2,0,Math.PI*.5),
+    glasses: new THREE.TorusGeometry(.055,.008,seg(6),seg(12)),
+    sweat: new THREE.SphereGeometry(.035,seg(8),seg(6)),
+    shadow: new THREE.CircleGeometry(.60,seg(20)),
     signBoard: new THREE.PlaneGeometry(1.8,.9),
-    signStick: new THREE.CylinderGeometry(.025,.03,1.35,8)
+    signStick: new THREE.CylinderGeometry(.025,.03,1.35,seg(8))
   };
   return jialeFanGeo;
 }
@@ -1828,6 +2141,9 @@ function makeConfettiSystem(max){
   let cursor = 0;
   return {
     spawn(x,y,z,n,palette,speed){
+      const scale = perfEffectScale();
+      if(scale <= 0) return;
+      n = Math.max(1, Math.round(n * scale));
       palette = palette || JIALE_PALETTE;
       for(let i=0;i<n;i++){
         const j = cursor++ % max;
@@ -1889,20 +2205,24 @@ function buildJialeDecor(){
     b.position.set(cx,5.45,z-.28);
     b.rotation.y = Math.PI + ang;
     jialeDecor.add(b);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map:glowTex, color:0xffb36b, transparent:true, opacity:.14,
-      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
-    }));
-    glow.scale.set(9,3,1);
-    glow.position.set(cx,5.45,z-.36);
-    jialeDecor.add(glow);
+    if(PERF.tier !== 'low'){
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex, color:0xffb36b, transparent:true, opacity:.14,
+        depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+      }));
+      glow.scale.set(9,3,1);
+      glow.position.set(cx,5.45,z-.36);
+      jialeDecor.add(glow);
+    }
   }
 
   buildJialeArch(jialeDecor, 78);
-  buildJialeStringLights(jialeDecor);
-  buildJialeLanterns(jialeDecor);
-  jialeConfetti = makeConfettiSystem(IS_MOBILE ? 360 : 700);
-  buildJialeSpotlights();
+  if(PERF.tier !== 'low'){
+    buildJialeStringLights(jialeDecor);
+    buildJialeLanterns(jialeDecor);
+    buildJialeSpotlights();
+  }
+  if(PERF.tier !== 'low') jialeConfetti = makeConfettiSystem(IS_MOBILE ? 360 : 700);
 }
 
 function buildJialeArch(parent, z){
@@ -2017,6 +2337,7 @@ function buildJialeSpotlights(){
 
 function createJialeFan(index){
   const geo = getJialeFanGeo();
+  const lowFan = PERF.tier === 'low';
   const g = new THREE.Group();
   const bodyGroup = new THREE.Group();
   g.add(bodyGroup);
@@ -2063,15 +2384,17 @@ function createJialeFan(index){
   const head = new THREE.Mesh(geo.head, skinMat);
   head.position.y = 1.49;
   bodyGroup.add(head);
-  [-1,1].forEach(side=>{
-    const ear = new THREE.Mesh(geo.ear, skinMat);
-    ear.position.set(side*.203,1.49,.0);
-    bodyGroup.add(ear);
-  });
-  const nose = new THREE.Mesh(geo.nose, skinMat);
-  nose.rotation.x = Math.PI/2;
-  nose.position.set(0,1.455,.205);
-  bodyGroup.add(nose);
+  if(!lowFan){
+    [-1,1].forEach(side=>{
+      const ear = new THREE.Mesh(geo.ear, skinMat);
+      ear.position.set(side*.203,1.49,.0);
+      bodyGroup.add(ear);
+    });
+    const nose = new THREE.Mesh(geo.nose, skinMat);
+    nose.rotation.x = Math.PI/2;
+    nose.position.set(0,1.455,.205);
+    bodyGroup.add(nose);
+  }
   [-1,1].forEach(side=>{
     const white = new THREE.Mesh(geo.eyeWhite, whiteMat);
     white.position.set(side*.072,1.515,.180);
@@ -2080,10 +2403,12 @@ function createJialeFan(index){
     const pupil = new THREE.Mesh(geo.pupil, eyeMat);
     pupil.position.set(side*.072,1.515,.205);
     bodyGroup.add(pupil);
-    const brow = new THREE.Mesh(geo.brow, browMat);
-    brow.position.set(side*.074,1.578,.19);
-    brow.rotation.z = side*.10;
-    bodyGroup.add(brow);
+    if(!lowFan){
+      const brow = new THREE.Mesh(geo.brow, browMat);
+      brow.position.set(side*.074,1.578,.19);
+      brow.rotation.z = side*.10;
+      bodyGroup.add(brow);
+    }
   });
   const mouth = new THREE.Mesh(geo.mouth, browMat);
   mouth.position.set(0,1.405,.20);
@@ -2093,12 +2418,14 @@ function createJialeFan(index){
   hairCap.position.y = 1.50;
   hairCap.rotation.x = -.08;
   bodyGroup.add(hairCap);
-  const fringe = new THREE.Mesh(geo.fringe, hairMat);
-  fringe.position.set(0,1.625,.13);
-  fringe.scale.set(1.15,.5,.85);
-  bodyGroup.add(fringe);
+  if(!lowFan){
+    const fringe = new THREE.Mesh(geo.fringe, hairMat);
+    fringe.position.set(0,1.625,.13);
+    fringe.scale.set(1.15,.5,.85);
+    bodyGroup.add(fringe);
+  }
 
-  const accessory = Math.random();
+  const accessory = lowFan ? 1 : Math.random();
   if(accessory < .30){
     const hat = new THREE.Mesh(geo.hat, accentMat);
     hat.position.set(0,1.75,0);
@@ -2142,10 +2469,12 @@ function createJialeFan(index){
     elbow.add(hand);
     const palm = new THREE.Mesh(geo.hand, skinMat);
     hand.add(palm);
-    const thumb = new THREE.Mesh(geo.thumb, skinMat);
-    thumb.position.set(side*.035,-.012,.02);
-    thumb.rotation.z = side*.7;
-    hand.add(thumb);
+    if(!lowFan){
+      const thumb = new THREE.Mesh(geo.thumb, skinMat);
+      thumb.position.set(side*.035,-.012,.02);
+      thumb.rotation.z = side*.7;
+      hand.add(thumb);
+    }
     return { shoulder, elbow, hand };
   }
   const armL = makeArm(-1), armR = makeArm(1);
@@ -2295,6 +2624,7 @@ function attachJialeSign(fan){
 
   if(!fan.fingersDone){
     fan.fingersDone = true;
+    if(PERF.tier === 'low') return sg;
     [fan.handL, fan.handR].forEach((hand, hi)=>{
       for(let i=0;i<3;i++){
         const f = new THREE.Mesh(geo.finger, fan.skinMat);
@@ -2316,7 +2646,7 @@ function spawnJialeFans(){
   if(!scene) return;
   jialeFanGroup = new THREE.Group();
   scene.add(jialeFanGroup);
-  const total = IS_MOBILE ? 9 : 12;
+  const total = PERF.tier === 'low' ? 5 : PERF.tier === 'medium' ? 8 : (IS_MOBILE ? 9 : 12);
   const spacing = 19 + Math.random()*4;
   const startZ = carZ + 30;
   for(let i=0;i<total;i++){
@@ -2617,7 +2947,7 @@ function updateJiale(dt){
     sp.light.intensity = 52 * jialeMix;
   }
 
-  for(const l of jialeLanterns){
+  if(PERF.tier !== 'low') for(const l of jialeLanterns){
     const sp = l.sprite;
     sp.position.y += l.speed * dt;
     sp.position.x = l.baseX + Math.sin(idleT * .55 + l.phase) * .65;
@@ -2890,17 +3220,20 @@ function buildTurnSigns(){
     );
     pole.position.set(x, 2.1, zz);
     scene.add(pole);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map:glowTex, color:0xffb36b, transparent:true, opacity:.15,
-      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
-    }));
-    glow.scale.set(7,4,1);
-    glow.position.set(x, 4.4, zz-.1);
-    scene.add(glow);
+    if(PERF.tier !== 'low'){
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex, color:0xffb36b, transparent:true, opacity:.15,
+        depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+      }));
+      glow.scale.set(7,4,1);
+      glow.position.set(x, 4.4, zz-.1);
+      scene.add(glow);
+    }
   });
 }
 
 function buildSkybridges(){
+  if(PERF.tier === 'low') return;
   const frame = new THREE.MeshStandardMaterial({color:0x101c28, roughness:.38, metalness:.72});
   const neon = new THREE.MeshBasicMaterial({color:0x54e8ff, toneMapped:false});
   [.34, .68].forEach((frac)=>{
@@ -2936,7 +3269,8 @@ function buildSkybridges(){
 function buildPylons(){
   const poleMat = new THREE.MeshStandardMaterial({color:0x1a2836, roughness:.4, metalness:.7});
   const ringMat = new THREE.MeshBasicMaterial({color:0x73e8ff, toneMapped:false});
-  for(let i=0;i<10;i++){
+  const pylonCount = PERF.tier === 'low' ? 4 : 10;
+  for(let i=0;i<pylonCount;i++){
     const z = 140 + i*190;
     if(z > roadEnd - 40) break;
     const side = i % 2 === 0 ? -1 : 1;
@@ -2950,19 +3284,21 @@ function buildPylons(){
     ring.rotation.x = Math.PI/2;
     ring.position.set(x, 6.8, zz);
     scene.add(ring);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map:glowTex, color:0x73e8ff, transparent:true, opacity:.32,
-      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
-    }));
-    glow.scale.set(2.6,2.6,1);
-    glow.position.set(x, 6.8, zz);
-    scene.add(glow);
+    if(PERF.tier !== 'low'){
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex, color:0x73e8ff, transparent:true, opacity:.32,
+        depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+      }));
+      glow.scale.set(2.6,2.6,1);
+      glow.position.set(x, 6.8, zz);
+      scene.add(glow);
+    }
   }
 }
 
 function buildCatEyes(){
   const pos = [], col = [];
-  const step = 6;
+  const step = PERF.tier === 'low' ? 12 : 6;
   for(let z=-60; z<roadEnd+80; z+=step){
     const ang = trackAngle(z);
     const cx = trackX(z);
@@ -2997,13 +3333,15 @@ function buildDistantTower(){
     ring.position.set(x, y, z);
     scene.add(ring);
   });
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map:glowTex, color:0x6fe8ff, transparent:true, opacity:.5,
-    depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
-  }));
-  glow.scale.set(6,6,1);
-  glow.position.set(x, 53, z);
-  scene.add(glow);
+  if(PERF.tier !== 'low'){
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:glowTex, color:0x6fe8ff, transparent:true, opacity:.5,
+      depthWrite:false, blending:THREE.AdditiveBlending, toneMapped:false
+    }));
+    glow.scale.set(6,6,1);
+    glow.position.set(x, 53, z);
+    scene.add(glow);
+  }
 }
 
 /* ============================================================
@@ -3072,13 +3410,25 @@ function buildAbstractSkyline(){
    ============================================================ */
 function initScene(){
   const host = $('scene');
-  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance', stencil:false});
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, IS_MOBILE ? 1.65 : 2));
+  const rendererOpts = {
+    antialias: PERF.tier !== 'low',
+    alpha:false,
+    powerPreference: PERF.tier === 'low' ? 'low-power' : 'high-performance',
+    stencil:false
+  };
+  const RendererCtor = (PERF.useWebGL1 && THREE.WebGL1Renderer) ? THREE.WebGL1Renderer : THREE.WebGLRenderer;
+  try{
+    renderer = new RendererCtor(rendererOpts);
+  }catch(e){
+    renderer = new THREE.WebGLRenderer(rendererOpts);
+    PERF.useWebGL1 = false;
+  }
+  renderer.setPixelRatio(perfPixelRatio());
   renderer.setSize(innerWidth, innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = PERF.tier === 'high';
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   host.appendChild(renderer.domElement);
 
@@ -3096,14 +3446,16 @@ function initScene(){
   skyTex = makeSkyTexture();
   skyTex.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = skyTex;
-  try{
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileEquirectangularShader();
-    envRT = pmrem.fromEquirectangular(skyTex);
-    scene.environment = envRT.texture;
-    pmrem.dispose();
-  }catch(e){
-    console.warn('[race] env map failed', e);
+  if(PERF.tier !== 'low'){
+    try{
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      pmrem.compileEquirectangularShader();
+      envRT = pmrem.fromEquirectangular(skyTex);
+      scene.environment = envRT.texture;
+      pmrem.dispose();
+    }catch(e){
+      console.warn('[race] env map failed', e);
+    }
   }
 
   buildLights();
@@ -3130,6 +3482,7 @@ function initScene(){
   resetCarPose();
 
   bindResize();
+  refreshPerfRuntime();
   cameraReady = true;
 }
 
@@ -3173,8 +3526,9 @@ function buildLights(){
 
   sunLight = new THREE.DirectionalLight(0xffc49b, 2.6);
   sunLight.position.set(-38, 44, 70);
-  sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(IS_MOBILE ? 1024 : 2048, IS_MOBILE ? 1024 : 2048);
+  sunLight.castShadow = PERF.tier === 'high';
+  const shadowSize = PERF.tier === 'high' ? (IS_MOBILE ? 1024 : 2048) : 512;
+  sunLight.shadow.mapSize.set(shadowSize, shadowSize);
   sunLight.shadow.camera.near = 1;
   sunLight.shadow.camera.far = 170;
   sunLight.shadow.camera.left = -26;
@@ -3197,7 +3551,7 @@ function buildLights(){
 function buildTrackRibbon(offset, width, y, material, startZ, endZ, step){
   startZ = startZ === undefined ? -120 : startZ;
   endZ = endZ === undefined ? roadEnd + 120 : endZ;
-  step = step || 2;
+  step = step || (PERF.tier === 'low' ? 4 : 2);
   const pos = [], uv = [], idx = [];
   const half = width/2;
   let row = 0;
@@ -3236,22 +3590,26 @@ function buildRoad(){
   );
   ground.rotation.x = -Math.PI/2;
   ground.position.set(0,-.12, roadEnd*.5);
-  ground.receiveShadow = true;
+  ground.receiveShadow = PERF.tier === 'high';
   scene.add(ground);
 
-  // 沥青
+  // 沥青：低配用标准材质，跳过高光/粗糙度贴图
   const asphaltMap = makeAsphaltTexture();
-  const roughMap = makeRoughnessTexture();
-  const roadMat = new THREE.MeshPhysicalMaterial({
-    map: asphaltMap,
-    roughnessMap: roughMap,
-    color:0x9aa7b8,
-    roughness:.46,
-    metalness:.10,
-    clearcoat:.82,
-    clearcoatRoughness:.24,
-    envMapIntensity:.72
-  });
+  const roughMap = PERF.tier === 'low' ? null : makeRoughnessTexture();
+  const roadMat = PERF.tier === 'low'
+    ? new THREE.MeshStandardMaterial({
+        map: asphaltMap, color:0x8d9aab, roughness:.70, metalness:.06
+      })
+    : new THREE.MeshPhysicalMaterial({
+        map: asphaltMap,
+        roughnessMap: roughMap,
+        color:0x9aa7b8,
+        roughness:.46,
+        metalness:.10,
+        clearcoat:.82,
+        clearcoatRoughness:.24,
+        envMapIntensity:.72
+      });
   const road = buildTrackRibbon(0, 15.2, 0, roadMat);
   road.receiveShadow = true;
   scene.add(road);
@@ -3314,7 +3672,8 @@ function buildRoad(){
     scene.add(strip);
   });
 
-  // 霓虹在湿路面上的假反射
+  // 霓虹在湿路面上的假反射（低配整段跳过）
+  if(PERF.tier === 'low'){ buildRoadMarks(); return; }
   const streakCv = makeCanvas(64,256,(c,w,h)=>{
     const g = c.createLinearGradient(0,0,0,h);
     g.addColorStop(0,'rgba(70,230,255,0)');
@@ -3356,6 +3715,10 @@ function buildRoad(){
     scene.add(p);
   }
 
+  buildRoadMarks();
+}
+
+function buildRoadMarks(){
   // 起点格子线
   const checkTex = texFromCanvas(makeCanvas(512,64,(c,w,h)=>{
     const s = 32;
@@ -3400,7 +3763,8 @@ function buildRoad(){
 }
 
 function buildStreetlights(){
-  const count = Math.max(8, Math.floor((roadEnd+80)/28));
+  const density = PERF.tier === 'low' ? .55 : PERF.tier === 'medium' ? .78 : 1;
+  const count = Math.max(6, Math.floor((roadEnd+80)/28*density));
   const poleGeo = new THREE.CylinderGeometry(.055,.08,5.3,8);
   const armGeo = new THREE.BoxGeometry(2.2,.06,.06);
   const lampGeo = new THREE.BoxGeometry(.55,.09,.20);
@@ -3411,6 +3775,7 @@ function buildStreetlights(){
   const lampMesh = new THREE.InstancedMesh(lampGeo, lampMat, count*2);
   const dummy = new THREE.Object3D();
   const glowPositions = [];
+  const glowOn = PERF.tier !== 'low';
   let k = 0;
   for(let i=0;i<count;i++){
     const z = -20 + i*28;
@@ -3429,7 +3794,7 @@ function buildStreetlights(){
       dummy.position.set(cx + s*7.85*cos, 5.24, z - s*7.85*sin);
       dummy.updateMatrix();
       lampMesh.setMatrixAt(k, dummy.matrix);
-      glowPositions.push(cx + s*7.85*cos, 5.22, z - s*7.85*sin);
+      if(glowOn) glowPositions.push(cx + s*7.85*cos, 5.22, z - s*7.85*sin);
       k++;
     }
   }
@@ -3439,15 +3804,17 @@ function buildStreetlights(){
   [poleMesh,armMesh,lampMesh].forEach(m=>{ m.frustumCulled=false; scene.add(m); });
   poleMesh.castShadow = false;
 
-  const pg = new THREE.BufferGeometry();
-  pg.setAttribute('position', new THREE.Float32BufferAttribute(glowPositions,3));
-  const pm = new THREE.PointsMaterial({
-    map:glowTex, color:0xbceeff, size:2.4, transparent:true, opacity:.68,
-    depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true
-  });
-  cityLampPoints = new THREE.Points(pg, pm);
-  cityLampPoints.frustumCulled = false;
-  scene.add(cityLampPoints);
+  if(glowOn && glowPositions.length){
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.Float32BufferAttribute(glowPositions,3));
+    const pm = new THREE.PointsMaterial({
+      map:glowTex, color:0xbceeff, size:2.4, transparent:true, opacity:.68,
+      depthWrite:false, blending:THREE.AdditiveBlending, sizeAttenuation:true
+    });
+    cityLampPoints = new THREE.Points(pg, pm);
+    cityLampPoints.frustumCulled = false;
+    scene.add(cityLampPoints);
+  }
 }
 
 function makeWindowTexture(seed){
@@ -3507,7 +3874,7 @@ function buildCity(){
   const buckets = [[],[],[]];
   const boxGeo = new THREE.BoxGeometry(1,1,1);
   const dummy = new THREE.Object3D();
-  const maxBuildings = IS_MOBILE ? 45 : 80;
+  const maxBuildings = PERF.tier === 'low' ? 26 : PERF.tier === 'medium' ? (IS_MOBILE ? 34 : 54) : (IS_MOBILE ? 45 : 80);
   let count = 0;
   for(let side of [-1,1]){
     for(let z=-70; z<roadEnd+120 && count<maxBuildings; z+=26+Math.random()*30){
@@ -3537,20 +3904,23 @@ function buildCity(){
 
   // 屋顶航标灯
   const redPos = [];
-  for(let i=0;i<50;i++){
+  const redCount = PERF.tier === 'low' ? 0 : 50;
+  for(let i=0;i<redCount;i++){
     const side = Math.random()<.5 ? -1 : 1;
     const rz = -40+Math.random()*(roadEnd+90);
     redPos.push(side*(24+Math.random()*105) + trackX(rz), 14+Math.random()*54, rz);
   }
-  const rg = new THREE.BufferGeometry();
-  rg.setAttribute('position', new THREE.Float32BufferAttribute(redPos,3));
-  const rp = new THREE.PointsMaterial({
-    map:glowTex, color:0xff5b6d, size:.85, transparent:true, opacity:.55,
-    depthWrite:false, blending:THREE.AdditiveBlending
-  });
-  const red = new THREE.Points(rg, rp);
-  red.frustumCulled = false;
-  scene.add(red);
+  if(redPos.length){
+    const rg = new THREE.BufferGeometry();
+    rg.setAttribute('position', new THREE.Float32BufferAttribute(redPos,3));
+    const rp = new THREE.PointsMaterial({
+      map:glowTex, color:0xff5b6d, size:.85, transparent:true, opacity:.55,
+      depthWrite:false, blending:THREE.AdditiveBlending
+    });
+    const red = new THREE.Points(rg, rp);
+    red.frustumCulled = false;
+    scene.add(red);
+  }
 
   // 公路两侧的悬浮广告牌
   const holoBlue = new THREE.MeshBasicMaterial({
@@ -3572,13 +3942,15 @@ function buildCity(){
     bill.position.set(p.x + cx, p.y, p.z);
     bill.rotation.y = p.ry + trackAngle(p.z);
     scene.add(bill);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map:glowTex, color:p.mat === holoBlue ? 0x43e8ff : 0xff7c91,
-      transparent:true, opacity:.22, depthWrite:false, blending:THREE.AdditiveBlending
-    }));
-    glow.scale.set(16,9,1);
-    glow.position.set(p.x + cx, p.y, p.z-.2);
-    scene.add(glow);
+    if(PERF.tier !== 'low'){
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex, color:p.mat === holoBlue ? 0x43e8ff : 0xff7c91,
+        transparent:true, opacity:.22, depthWrite:false, blending:THREE.AdditiveBlending
+      }));
+      glow.scale.set(16,9,1);
+      glow.position.set(p.x + cx, p.y, p.z-.2);
+      scene.add(glow);
+    }
   });
 }
 
@@ -3589,7 +3961,7 @@ function buildStartGantry(){
   [-1,1].forEach(s=>{
     const pillar = new THREE.Mesh(new THREE.BoxGeometry(.44,7.6,.44), frameMat);
     pillar.position.set(s*8.2,3.8,16);
-    pillar.castShadow = true;
+    pillar.castShadow = PERF.tier === 'high';
     group.add(pillar);
     const strip = new THREE.Mesh(new THREE.BoxGeometry(.045,7.2,.05), neonMat);
     strip.position.set(s*7.97,3.8,16.23);
@@ -3597,7 +3969,7 @@ function buildStartGantry(){
   });
   const beam = new THREE.Mesh(new THREE.BoxGeometry(17.2,.72,.6), frameMat);
   beam.position.set(0,7.5,16);
-  beam.castShadow = true;
+  beam.castShadow = PERF.tier === 'high';
   group.add(beam);
   const beamStrip = new THREE.Mesh(new THREE.BoxGeometry(16.6,.035,.05), neonMat);
   beamStrip.position.set(0,7.15,16.32);
@@ -3619,14 +3991,16 @@ function buildStartGantry(){
     light.rotation.y = Math.PI;
     group.add(light);
     startLightMats.push(mat);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map:glowTex, color:0xff334c, transparent:true, opacity:.5, depthWrite:false, blending:THREE.AdditiveBlending
-    }));
-    glow.scale.set(.85,.85,1);
-    glow.position.copy(light.position);
-    glow.position.z -= .05;
-    group.add(glow);
-    startLightGlows.push(glow);
+    if(PERF.tier !== 'low'){
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex, color:0xff334c, transparent:true, opacity:.5, depthWrite:false, blending:THREE.AdditiveBlending
+      }));
+      glow.scale.set(.85,.85,1);
+      glow.position.copy(light.position);
+      glow.position.z -= .05;
+      group.add(glow);
+      startLightGlows.push(glow);
+    }
   }
 
   scene.add(group);
@@ -3668,7 +4042,8 @@ function buildBodyGeometry(){
     [2.17,.70,.33,.53],
     [2.34,.48,.35,.45]
   ];
-  const N = 62, HALF = 18;
+  const N = PERF.tier === 'low' ? 30 : PERF.tier === 'medium' ? 48 : 62;
+  const HALF = PERF.tier === 'low' ? 10 : PERF.tier === 'medium' ? 14 : 18;
   const z0 = keys[0][0], z1 = keys[keys.length-1][0];
   const positions = [], indices = [];
   const P = HALF*2;
@@ -3736,7 +4111,8 @@ function buildCanopyGeometry(){
     [.80,.70,.815,.13],
     [.96,.61,.80,.012]
   ];
-  const N = 42, HALF = 18;
+  const N = PERF.tier === 'low' ? 22 : PERF.tier === 'medium' ? 32 : 42;
+  const HALF = PERF.tier === 'low' ? 10 : PERF.tier === 'medium' ? 14 : 18;
   const z0 = keys[0][0], z1 = keys[keys.length-1][0];
   const pos = [], idx = [];
   const P = HALF+1;
@@ -3802,20 +4178,25 @@ function buildCar(){
   carGroup.add(carBody);
   scene.add(carGroup);
 
-  const paint = new THREE.MeshPhysicalMaterial({
-    color:0x0b4a86,
-    metalness:.84,
-    roughness:.22,
-    clearcoat:1,
-    clearcoatRoughness:.035,
-    envMapIntensity:1.45,
-    iridescence:.20,
-    iridescenceIOR:1.35,
-    iridescenceThicknessRange:[120, 560]
-  });
-  const paintDark = new THREE.MeshPhysicalMaterial({
-    color:0x062845, metalness:.88, roughness:.28, clearcoat:1, clearcoatRoughness:.06, envMapIntensity:1.25
-  });
+  const lowCar = PERF.tier === 'low';
+  const paint = lowCar
+    ? new THREE.MeshStandardMaterial({ color:0x0b4a86, metalness:.62, roughness:.34 })
+    : new THREE.MeshPhysicalMaterial({
+        color:0x0b4a86,
+        metalness:.84,
+        roughness:.22,
+        clearcoat:1,
+        clearcoatRoughness:.035,
+        envMapIntensity:1.45,
+        iridescence:.20,
+        iridescenceIOR:1.35,
+        iridescenceThicknessRange:[120, 560]
+      });
+  const paintDark = lowCar
+    ? new THREE.MeshStandardMaterial({ color:0x062845, metalness:.62, roughness:.38 })
+    : new THREE.MeshPhysicalMaterial({
+        color:0x062845, metalness:.88, roughness:.28, clearcoat:1, clearcoatRoughness:.06, envMapIntensity:1.25
+      });
   const carbon = new THREE.MeshStandardMaterial({
     color:0x0a0e14, metalness:.62, roughness:.38, envMapIntensity:.85
   });
@@ -3825,10 +4206,15 @@ function buildCar(){
   const chrome = new THREE.MeshStandardMaterial({
     color:0xb9c8d8, metalness:.98, roughness:.15, envMapIntensity:1.6
   });
-  const glass = new THREE.MeshPhysicalMaterial({
-    color:0x08131f, metalness:.12, roughness:.055, clearcoat:1, clearcoatRoughness:.025,
-    transparent:true, opacity:.72, envMapIntensity:2.0, side:THREE.DoubleSide, depthWrite:false
-  });
+  const glass = lowCar
+    ? new THREE.MeshStandardMaterial({
+        color:0x08131f, metalness:.30, roughness:.14, transparent:true, opacity:.72,
+        side:THREE.DoubleSide, depthWrite:false
+      })
+    : new THREE.MeshPhysicalMaterial({
+        color:0x08131f, metalness:.12, roughness:.055, clearcoat:1, clearcoatRoughness:.025,
+        transparent:true, opacity:.72, envMapIntensity:2.0, side:THREE.DoubleSide, depthWrite:false
+      });
   const lightMatSide = new THREE.MeshBasicMaterial({color:0x9df5ff, toneMapped:false});
   const accentMat = new THREE.MeshBasicMaterial({color:0x35e6ff, toneMapped:false});
 
@@ -3843,21 +4229,23 @@ function buildCar(){
   canopy.renderOrder = 3;
   carBody.add(canopy);
 
-  // 座舱内部
-  const cockpit = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 18, 12),
-    new THREE.MeshStandardMaterial({color:0x05080d, roughness:.9, metalness:.1})
-  );
-  cockpit.scale.set(.50,.25,.78);
-  cockpit.position.set(0,.80,-.24);
-  carBody.add(cockpit);
-  const seatMat = new THREE.MeshStandardMaterial({color:0x241118, roughness:.72, metalness:.12});
-  [-.24,.24].forEach(x=>{
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(.26,.30,.28), seatMat);
-    seat.position.set(x,.99,-.50);
-    seat.rotation.x = -.18;
-    carBody.add(seat);
-  });
+  // 座舱内部（低配省略）
+  if(!lowCar){
+    const cockpit = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 18, 12),
+      new THREE.MeshStandardMaterial({color:0x05080d, roughness:.9, metalness:.1})
+    );
+    cockpit.scale.set(.50,.25,.78);
+    cockpit.position.set(0,.80,-.24);
+    carBody.add(cockpit);
+    const seatMat = new THREE.MeshStandardMaterial({color:0x241118, roughness:.72, metalness:.12});
+    [-.24,.24].forEach(x=>{
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(.26,.30,.28), seatMat);
+      seat.position.set(x,.99,-.50);
+      seat.rotation.x = -.18;
+      carBody.add(seat);
+    });
+  }
 
   // 宽体轮拱（四个）
   const wheelZ = [1.48, -1.48];
@@ -3866,11 +4254,14 @@ function buildCar(){
   const lipMat = carbon;
   wheelZ.forEach(z=>{
     [-1,1].forEach(side=>{
-      const arch = new THREE.Mesh(buildArchGeometry(side*wheelX, .455, z, .545, .52, 30), archMat);
-      arch.castShadow = true;
+      const archSegs = PERF.tier === 'low' ? 14 : 30;
+      const arch = new THREE.Mesh(buildArchGeometry(side*wheelX, .455, z, .545, .52, archSegs), archMat);
+      arch.castShadow = PERF.tier === 'high';
       carBody.add(arch);
-      const lip = new THREE.Mesh(buildArchGeometry(side*(wheelX + .235), .455, z, .555, .06, 30), lipMat);
-      carBody.add(lip);
+      if(!lowCar){
+        const lip = new THREE.Mesh(buildArchGeometry(side*(wheelX + .235), .455, z, .555, .06, archSegs), lipMat);
+        carBody.add(lip);
+      }
     });
   });
 
@@ -3925,8 +4316,8 @@ function buildCar(){
   ventLine.position.set(0,.806,1.46);
   carBody.add(ventLine);
 
-  // 侧进气口
-  [-1,1].forEach(s=>{
+  // 侧进气口（低配省略）
+  if(!lowCar) [-1,1].forEach(s=>{
     const intake = new THREE.Mesh(new THREE.BoxGeometry(.045,.17,.46), carbonMatte);
     intake.position.set(s*1.005,.56,-.94);
     intake.rotation.y = s*.08;
@@ -3937,7 +4328,7 @@ function buildCar(){
   });
 
   // 后视镜（贴在 A 柱两侧）
-  [-1,1].forEach(s=>{
+  if(!lowCar) [-1,1].forEach(s=>{
     const stalk = new THREE.Mesh(new THREE.BoxGeometry(.045,.12,.05), carbon);
     stalk.position.set(s*.74,.91,.55);
     carBody.add(stalk);
@@ -3950,7 +4341,7 @@ function buildCar(){
     carBody.add(mirrorFace);
   });
 
-  // 大灯（细长灯带 + 发光 sprite）
+  // 大灯（细长灯带 + 发光 sprite；低配不发光）
   for(const s of [-1,1]){
     const head = new THREE.Mesh(new THREE.BoxGeometry(.34,.04,.06), lightMatSide);
     head.position.set(s*.33,.468,2.275);
@@ -3960,13 +4351,15 @@ function buildCar(){
     inner.position.set(s*.33,.484,2.288);
     inner.rotation.y = s*.24;
     carBody.add(inner);
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-      map:glowTex, color:0xbdeeff, transparent:true, opacity:.85,
-      depthWrite:false, blending:THREE.AdditiveBlending
-    }));
-    glow.scale.set(1.05,.5,1);
-    glow.position.set(s*.35,.49,2.30);
-    carBody.add(glow);
+    if(!lowCar){
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+        map:glowTex, color:0xbdeeff, transparent:true, opacity:.85,
+        depthWrite:false, blending:THREE.AdditiveBlending
+      }));
+      glow.scale.set(1.05,.5,1);
+      glow.position.set(s*.35,.49,2.30);
+      carBody.add(glow);
+    }
   }
 
   // 尾灯
@@ -3978,7 +4371,7 @@ function buildCar(){
   const tailCore = new THREE.Mesh(new THREE.BoxGeometry(.86,.018,.025), brakeLightCoreMat);
   tailCore.position.set(0,.49,-2.38);
   carBody.add(tailCore);
-  [-1,1].forEach(s=>{
+  if(!lowCar) [-1,1].forEach(s=>{
     const g = new THREE.Sprite(new THREE.SpriteMaterial({
       map:glowTex, color:0xff334c, transparent:true, opacity:.42,
       depthWrite:false, blending:THREE.AdditiveBlending
@@ -3989,8 +4382,8 @@ function buildCar(){
     tailGlows.push(g);
   });
 
-  // 排气
-  for(const s of [-1,1]){
+  // 排气（低配省略尾喉装饰）
+  if(!lowCar) for(const s of [-1,1]){
     const pipe = new THREE.Mesh(
       new THREE.CylinderGeometry(.085,.10,.28,16,1,true),
       new THREE.MeshStandardMaterial({color:0x1c242d, metalness:.9, roughness:.22})
@@ -4005,7 +4398,7 @@ function buildCar(){
   }
 
   // 氮气火焰
-  const flameGeo = new THREE.ConeGeometry(.085, 1, 12, 1, true);
+  const flameGeo = new THREE.ConeGeometry(.085, 1, PERF.tier === 'low' ? 6 : 12, 1, true);
   flameGeo.translate(0,.5,0);
   flameGeo.rotateX(-Math.PI/2);
   for(const s of [-1,1]){
@@ -4025,9 +4418,11 @@ function buildCar(){
     carBody.add(inner);
     nitroFlames.push({outer, inner});
   }
-  nitroRearLight = new THREE.PointLight(0x3ae4ff, 0, 7, 2);
-  nitroRearLight.position.set(0,.4,-2.7);
-  carBody.add(nitroRearLight);
+  if(!lowCar){
+    nitroRearLight = new THREE.PointLight(0x3ae4ff, 0, 7, 2);
+    nitroRearLight.position.set(0,.4,-2.7);
+    carBody.add(nitroRearLight);
+  }
 
   // 侧标
   const sideDecal = texFromCanvas(makeCanvas(256,96,(c,w,h)=>{
@@ -4049,15 +4444,17 @@ function buildCar(){
     carBody.add(decal);
   });
 
-  // 车底光晕 / 空气动力阴影
-  underGlowMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.8,5.2),
-    new THREE.MeshBasicMaterial({map:glowTex, color:0x35d8ff, transparent:true, opacity:.10, depthWrite:false, blending:THREE.AdditiveBlending})
-  );
-  underGlowMesh.rotation.x = -Math.PI/2;
-  underGlowMesh.position.y = .028;
-  underGlowMesh.renderOrder = 1;
-  carGroup.add(underGlowMesh);
+  // 车底光晕 / 空气动力阴影（低配省略光晕，保留接触阴影）
+  if(!lowCar){
+    underGlowMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.8,5.2),
+      new THREE.MeshBasicMaterial({map:glowTex, color:0x35d8ff, transparent:true, opacity:.10, depthWrite:false, blending:THREE.AdditiveBlending})
+    );
+    underGlowMesh.rotation.x = -Math.PI/2;
+    underGlowMesh.position.y = .028;
+    underGlowMesh.renderOrder = 1;
+    carGroup.add(underGlowMesh);
+  }
   const contact = new THREE.Mesh(
     new THREE.PlaneGeometry(3.1,5.1),
     new THREE.MeshBasicMaterial({map:glowTex, color:0x000000, transparent:true, opacity:.55, depthWrite:false})
@@ -4083,7 +4480,7 @@ function buildCar(){
         [.455,-.055],[.455,.055],[.445,.12],[.42,.17],
         [.365,.185],[.30,.17]
       ].map(p=>new THREE.Vector2(p[0],p[1]));
-      const tireGeo = new THREE.LatheGeometry(tirePts, 40);
+      const tireGeo = new THREE.LatheGeometry(tirePts, PERF.tier === 'low' ? 20 : 40);
       tireGeo.rotateZ(Math.PI/2);
       const tire = new THREE.Mesh(tireGeo, new THREE.MeshStandardMaterial({
         color:0x080a0d, roughness:.82, metalness:.02
@@ -4091,63 +4488,64 @@ function buildCar(){
       tire.castShadow = true;
       spin.add(tire);
 
-      /* 开口轮辋：端面不封盖，辐条与刹车盘才看得见 */
+      /* 开口轮辋：低配只保留轮辋桶 + 轮毂，高配保持完整细节 */
       const barrel = new THREE.Mesh(
-        new THREE.CylinderGeometry(.30,.30,.34,32,1,true),
+        new THREE.CylinderGeometry(.30,.30,.34, PERF.tier === 'low' ? 16 : 32, 1, true),
         new THREE.MeshStandardMaterial({color:0x1a222c, metalness:.92, roughness:.29, envMapIntensity:1.2, side:THREE.DoubleSide})
       );
       barrel.rotation.z = Math.PI/2;
       spin.add(barrel);
+      if(!lowCar){
+        const disc = new THREE.Mesh(
+          new THREE.CylinderGeometry(.245,.245,.028,32),
+          new THREE.MeshStandardMaterial({color:0x6b7480, metalness:.9, roughness:.34})
+        );
+        disc.rotation.z = Math.PI/2;
+        disc.position.x = -side*.09;
+        spin.add(disc);
+        const caliper = new THREE.Mesh(
+          new THREE.BoxGeometry(.075,.15,.075),
+          new THREE.MeshStandardMaterial({color:0xff7a44, roughness:.35, metalness:.3})
+        );
+        caliper.position.set(-side*.13,.17,.02);
+        root.add(caliper);          // 卡钳不随轮毂旋转
 
-      const disc = new THREE.Mesh(
-        new THREE.CylinderGeometry(.245,.245,.028,32),
-        new THREE.MeshStandardMaterial({color:0x6b7480, metalness:.9, roughness:.34})
-      );
-      disc.rotation.z = Math.PI/2;
-      disc.position.x = -side*.09;
-      spin.add(disc);
-      const caliper = new THREE.Mesh(
-        new THREE.BoxGeometry(.075,.15,.075),
-        new THREE.MeshStandardMaterial({color:0xff7a44, roughness:.35, metalness:.3})
-      );
-      caliper.position.set(-side*.13,.17,.02);
-      root.add(caliper);          // 卡钳不随轮毂旋转
-
-      const spokeGeo = new THREE.BoxGeometry(.032,.26,.045);
-      spokeGeo.translate(0,.155,0); // 从轮心接到轮辋内缘
-      const spokeMat = new THREE.MeshStandardMaterial({color:0xbfd0df, metalness:.96, roughness:.17, envMapIntensity:1.6});
-      for(let i=0;i<7;i++){
-        const spoke = new THREE.Mesh(spokeGeo, spokeMat);
-        spoke.position.x = side*.181;
-        spoke.rotation.x = i*Math.PI*2/7;
-        spin.add(spoke);
+        const spokeGeo = new THREE.BoxGeometry(.032,.26,.045);
+        spokeGeo.translate(0,.155,0); // 从轮心接到轮辋内缘
+        const spokeMat = new THREE.MeshStandardMaterial({color:0xbfd0df, metalness:.96, roughness:.17, envMapIntensity:1.6});
+        for(let i=0;i<7;i++){
+          const spoke = new THREE.Mesh(spokeGeo, spokeMat);
+          spoke.position.x = side*.181;
+          spoke.rotation.x = i*Math.PI*2/7;
+          spin.add(spoke);
+        }
+        const hub = new THREE.Mesh(
+          new THREE.CylinderGeometry(.075,.085,.06,20),
+          new THREE.MeshStandardMaterial({color:0x93a6b7, metalness:.95, roughness:.18})
+        );
+        hub.rotation.z = Math.PI/2;
+        hub.position.x = side*.196;
+        spin.add(hub);
+        const rimRing = new THREE.Mesh(
+          new THREE.TorusGeometry(.292,.011,6,44),
+          new THREE.MeshBasicMaterial({color:0x38d8ff, toneMapped:false})
+        );
+        rimRing.rotation.y = Math.PI/2;
+        rimRing.position.x = side*.190;
+        spin.add(rimRing);
+        const wallRing = new THREE.Mesh(
+          new THREE.TorusGeometry(.345,.006,5,44),
+          new THREE.MeshBasicMaterial({color:0xeaf8ff, transparent:true, opacity:.7, toneMapped:false})
+        );
+        wallRing.rotation.y = Math.PI/2;
+        wallRing.position.x = side*.192;
+        spin.add(wallRing);
       }
-      const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(.075,.085,.06,20),
-        new THREE.MeshStandardMaterial({color:0x93a6b7, metalness:.95, roughness:.18})
-      );
-      hub.rotation.z = Math.PI/2;
-      hub.position.x = side*.196;
-      spin.add(hub);
-      const rimRing = new THREE.Mesh(
-        new THREE.TorusGeometry(.292,.011,6,44),
-        new THREE.MeshBasicMaterial({color:0x38d8ff, toneMapped:false})
-      );
-      rimRing.rotation.y = Math.PI/2;
-      rimRing.position.x = side*.190;
-      spin.add(rimRing);
-      const wallRing = new THREE.Mesh(
-        new THREE.TorusGeometry(.345,.006,5,44),
-        new THREE.MeshBasicMaterial({color:0xeaf8ff, transparent:true, opacity:.7, toneMapped:false})
-      );
-      wallRing.rotation.y = Math.PI/2;
-      wallRing.position.x = side*.192;
-      spin.add(wallRing);
     });
   });
 
-  // 头灯真实照明（现在车已存在）
-  for(const side of [-1,1]){
+  // 头灯真实照明（现在车已存在；低配改用无光照车灯材质）
+  if(!lowCar) for(const side of [-1,1]){
     const spot = new THREE.SpotLight(0xdff4ff, 105, 70, .42, .75, 1.1);
     spot.position.set(side*.33,.55,2.05);
     const target = new THREE.Object3D();
@@ -4259,6 +4657,9 @@ function makeBurstSystem(max){
   let cursor = 0;
   return {
     spawn(x,y,z,n,palette,speed){
+      const scale = perfEffectScale();
+      if(scale <= 0) return;
+      n = Math.max(1, Math.round(n * scale));
       palette = palette || [[.45,1,.95],[1,1,.95],[.45,.7,1]];
       for(let i=0;i<n;i++){
         const j = cursor++ % max;
@@ -4312,8 +4713,8 @@ function makeBurstSystem(max){
   };
 }
 function buildEffects(){
-  burst = makeBurstSystem(IS_MOBILE ? 320 : 640);
-  rings = new RingPool(IS_MOBILE ? 4 : 8);
+  burst = makeBurstSystem(PERF.tier === 'low' ? 120 : PERF.tier === 'medium' ? 220 : (IS_MOBILE ? 320 : 640));
+  rings = new RingPool(PERF.tier === 'low' ? 2 : IS_MOBILE ? 4 : 8);
 }
 function RingPool(count){
   const pool = [];
@@ -4332,6 +4733,7 @@ function RingPool(count){
   }
   let cursor = 0;
   this.spawn = function(x,y,z,startScale,endScale,duration,color){
+    if(perfEffectScale() <= 0) return null;
     const r = pool[cursor++ % pool.length];
     r.mesh.position.set(x,y,z);
     r.mesh.scale.setScalar(startScale);
@@ -5440,6 +5842,11 @@ syncAudioUI();
 function tick(now){
   if(disposed) return;
   raf = requestAnimationFrame(tick);
+  if(PERF.maxFps){
+    const frameGap = 1000 / PERF.maxFps;
+    if(PERF.lastFrameAt && now - PERF.lastFrameAt < frameGap - 1.2) return;
+    PERF.lastFrameAt = now;
+  }
   if(!lastTime) lastTime = now;
   let dt = (now - lastTime)/1000;
   lastTime = now;
@@ -5468,6 +5875,11 @@ function tick(now){
     }
     fpsFrames = 0;
     fpsAt = now;
+    if(PERF.evalActive && PERF.mode === 'auto' && !document.hidden){
+      PERF.evalWindows.push(fps);
+      if(PERF.evalWindows.length >= 4) finishPerfEvaluation();
+    }
+    if(PERF.evalDone) monitorPerfWindow(fps, now);
   }
 }
 function startLoop(){
@@ -5558,7 +5970,7 @@ bindJialeTrigger(speedo);
 function bindResize(){
   addEventListener('resize', ()=>{
     if(!renderer || !camera) return;
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, IS_MOBILE ? 1.65 : 2));
+    renderer.setPixelRatio(perfPixelRatio());
     renderer.setSize(innerWidth, innerHeight);
     camera.aspect = innerWidth/innerHeight;
     camera.updateProjectionMatrix();
@@ -5566,6 +5978,9 @@ function bindResize(){
 }
 function dispose(){
   disposed = true;
+  clearTimeout(perfEvalTimer);
+  perfEvalTimer = null;
+  PERF.evalActive = false;
   if(raf) cancelAnimationFrame(raf);
   raf = null;
   if(scene){
@@ -5675,9 +6090,11 @@ async function boot(){
   }
   names = list;
   candidateCount.textContent = String(names.length);
+  initPerformanceState();
   try{
     initScene();
     startLoop();
+    startPerfEvaluation();
     finishLoading();
     startBtn.disabled = false;
     document.body.classList.add('race-ready');
@@ -5704,6 +6121,15 @@ window.__raceDebug = {
     calls: renderer ? renderer.info.render.calls : 0,
     three: THREE ? THREE.REVISION : null,
     fps: fpsValue ? fpsValue.textContent : '—',
+    perf: {
+      tier: PERF.tier, capTier: PERF.capTier, mode: PERF.mode,
+      autoAdjust: PERF.autoAdjust, webgl: PERF.cap ? PERF.cap.webglVersion : 0,
+      gpu: PERF.cap ? PERF.cap.renderer : '',
+      maxFps: PERF.maxFps, effectScale: PERF.effectScale,
+      pixelRatio: renderer ? renderer.getPixelRatio() : 0,
+      shadows: !!(renderer && renderer.shadowMap.enabled),
+      evalDone: PERF.evalDone, avgFps: PERF.avgFps
+    },
     audio: Sfx.state,
     volume: +Sfx.volume.toFixed(2), muted: Sfx.muted,
     extras: {

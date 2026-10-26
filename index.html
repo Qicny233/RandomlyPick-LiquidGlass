@@ -2590,7 +2590,7 @@ html[data-theme="dark"] #inputFeedback.error { color: #f08b7f; }
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 148px;
+  width: 164px;
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -2814,16 +2814,76 @@ html.lg-compat #numberArea.lg-settle::after { display: none; }      /* ③ 定�
 .compat-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   margin-top: 4px;
-  padding: 8px 10px 0;
+  padding: 8px 2px 0;
   border-top: 1px solid rgba(25, 35, 55, .06);
 }
-.compat-label { font-size: 12px; letter-spacing: 1px; color: var(--ink-2); }
+.compat-label {
+  font-size: 11px;
+  letter-spacing: .6px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.compat-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(25, 35, 55, .055);
+  border: 1px solid rgba(25, 35, 55, .045);
+}
+.compat-opt {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  min-width: 26px;
+  padding: 4px 3px;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: .3px;
+  cursor: pointer;
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+.compat-opt:hover:not(.on) { background: rgba(255, 255, 255, .55); }
+.compat-opt.on {
+  background: rgba(25, 35, 55, .85);
+  color: #ffffff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .12) inset;
+}
+.compat-opt[data-compat="auto"] { position: relative; }
+.compat-opt[data-compat="auto"]::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 2px;
+  height: 2px;
+  margin-left: -1px;
+  border-radius: 50%;
+  background: #7de0a4;
+  opacity: 0;
+  transition: opacity .2s;
+}
+#compatSeg[data-auto-on="1"] .compat-opt[data-compat="auto"]::after { opacity: 1; }
 html[data-theme="dark"] .compat-row { border-top-color: rgba(255, 255, 255, .08); }
+html[data-theme="dark"] .compat-seg {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .08);
+}
+html[data-theme="dark"] .compat-opt { color: rgba(235, 242, 255, .62); }
+html[data-theme="dark"] .compat-opt:hover:not(.on) { background: rgba(255, 255, 255, .12); }
+html[data-theme="dark"] .compat-opt.on { background: rgba(255, 255, 255, .88); color: #17202e; }
 
 /* --- 3. 触屏分支优化（touch-action 对鼠标零影响，参数原样保留） --- */
 html { overscroll-behavior: none; }   /* 消除下拉刷新/橡皮筋对按压的打断 */
-.top-btn, #resetBtn, #complianceDot, .pick-opt, .theme-opt, .ob-btn,
+.top-btn, #resetBtn, #complianceDot, .pick-opt, .theme-opt, .compat-opt, .ob-btn,
 .dialog-btn, #clearHistoryBtn, #resetWeightsBtn, .switch { touch-action: none; }
 #confirmBtn, .sub-back-btn, #repairComplianceBtn, .suggest-item,
 .setting-link { touch-action: manipulation; }
@@ -3658,7 +3718,15 @@ html[data-theme="dark"] #resetDefaultsToast {
         try { window.dispatchEvent(new CustomEvent('lg-star', { detail: cfg.star })); } catch (e) {}
       }
 
-      setToggle('compatToggle', cfg.compat, 'lg_compat_v1');
+      var compatMode = cfg.compat ? 'on' : 'auto';
+      store('lg_compat_mode_v1', compatMode);
+      if (!cfg.compat) store('lg_compat_auto_v1', '0');
+      if (window.__lgCompatRuntime) {
+        window.__lgCompatRuntime.setMode(compatMode, true);
+        if (!cfg.compat) {
+          window.__lgCompatRuntime.setAutoResult({ tier: 'high', compatOn: false, autoAdjust: true });
+        }
+      }
       setToggle('funMsgToggle', cfg.funMsg, 'lottery_funmsg_v1');
       setToggle('nylonToggle', cfg.nylon, 'nailong_enabled');
       setToggle('flowBgToggle', cfg.flowBg, 'flow_bg_enabled');
@@ -3915,7 +3983,11 @@ html[data-theme="dark"] #resetDefaultsToast {
       <button class="theme-opt" data-theme="macaron" type="button">马卡龙</button>
       <div class="compat-row">
         <span class="compat-label">兼容模式</span>
-        <label class="switch"><input type="checkbox" id="compatToggle"><span class="switch-track"></span></label>
+        <div id="compatSeg" class="compat-seg" role="group" aria-label="兼容模式">
+          <button class="compat-opt" data-compat="auto" type="button" aria-pressed="true">自动</button>
+          <button class="compat-opt" data-compat="on" type="button" aria-pressed="false">开</button>
+          <button class="compat-opt" data-compat="off" type="button" aria-pressed="false">关</button>
+        </div>
       </div>
     </div>
   </div>
@@ -6012,30 +6084,89 @@ html[data-theme="dark"] #resetDefaultsToast {
 })();
 </script>
 <script>
-/* compat runtime (additive) — 性能兼容模式：状态本地保存；开启时给 html
-   加 lg-compat（CSS 侧降载），并拦掉指针驱动环境反光的高频回调。 */
+/* compat runtime (additive) — 兼容模式三档：自动 / 开 / 关。
+   自动档接收赛车页的静默性能判定；手动开关立即覆盖并停用自动适配。
+   开启时给 html 加 lg-compat（CSS 侧降载），并拦掉指针驱动环境反光的高频回调。 */
 (function () {
   'use strict';
   if (window.__lgCompat) return;
   window.__lgCompat = true;
   var KEY = 'lg_compat_v1';
+  var MODE_KEY = 'lg_compat_mode_v1';
+  var AUTO_KEY = 'lg_compat_auto_v1';
+  var TIER_KEY = 'lg_perf_tier_v1';
   var root = document.documentElement;
-  var box = document.getElementById('compatToggle');
-  function apply(on) {
+  var seg = document.getElementById('compatSeg');
+  var mode = 'auto';
+  var autoOn = false;
+
+  function read(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function store(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+  function validMode(value) {
+    return value === 'auto' || value === 'on' || value === 'off';
+  }
+  function effective() {
+    return mode === 'on' || (mode === 'auto' && autoOn);
+  }
+  function syncUI() {
+    var on = effective();
     if (on) root.classList.add('lg-compat');
     else root.classList.remove('lg-compat');
-    if (box) box.checked = !!on;
+    store(KEY, on ? '1' : '0');
+    if (seg) seg.setAttribute('data-auto-on', mode === 'auto' && autoOn ? '1' : '0');
+    var btns = document.querySelectorAll('#compatSeg [data-compat]');
+    for (var i = 0; i < btns.length; i++) {
+      var active = btns[i].getAttribute('data-compat') === mode;
+      btns[i].classList.toggle('on', active);
+      btns[i].setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
   }
-  var on = false;
-  try { on = localStorage.getItem(KEY) === '1'; } catch (e) {}
-  apply(on);
-  if (box) {
-    box.addEventListener('change', function () {
-      on = !!box.checked;
-      try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e2) {}
-      apply(on);
+  function setMode(next, persist) {
+    if (!validMode(next)) return mode;
+    mode = next;
+    if (persist !== false) store(MODE_KEY, mode);
+    syncUI();
+    return mode;
+  }
+  function setAutoResult(data) {
+    if (!data || data.autoAdjust === false || mode !== 'auto') return;
+    if (data.tier !== 'high' && data.tier !== 'medium' && data.tier !== 'low') return;
+    autoOn = typeof data.compatOn === 'boolean' ? data.compatOn : data.tier !== 'high';
+    store(AUTO_KEY, autoOn ? '1' : '0');
+    store(TIER_KEY, data.tier);
+    syncUI();
+  }
+
+  var saved = read(MODE_KEY);
+  if (validMode(saved)) mode = saved;
+  else {
+    mode = read(KEY) === '1' ? 'on' : 'auto';
+    store(MODE_KEY, mode);
+  }
+  autoOn = read(AUTO_KEY) === '1';
+  syncUI();
+
+  if (seg) {
+    seg.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('[data-compat]') : null;
+      if (!btn) return;
+      e.stopPropagation();
+      setMode(btn.getAttribute('data-compat'), true);
     });
   }
+
+  window.__lgCompatRuntime = {
+    getMode: function () { return mode; },
+    getState: function () { return { mode: mode, autoOn: autoOn, effective: effective() }; },
+    setMode: setMode,
+    setAutoResult: setAutoResult,
+    refresh: syncUI
+  };
+
   // 兼容模式下阻止 pointermove 冒泡 → 应用的"动态环境光"回调不再执行。
   // 本脚本注册在按压层之后，按压层自身的捕获监听不受影响。
   document.addEventListener('pointermove', function (e) {
@@ -9192,7 +9323,21 @@ html[data-theme="dark"] #resetDefaultsToast {
        以消息来源窗口为准，并只接受赛车 iframe 的消息 */
     if (!e.data || e.source !== frame.contentWindow) return;
     if (e.data.type === 'race-ready') {
-      try { frame.contentWindow.postMessage({ type: 'race-names', names: extractNames() }, '*'); } catch (err) {}
+      var perfRuntime = window.__lgCompatRuntime;
+      var compatMode = perfRuntime ? perfRuntime.getMode() : null;
+      var perfTier = null;
+      try { perfTier = localStorage.getItem('lg_perf_tier_v1'); } catch (err) {}
+      try {
+        frame.contentWindow.postMessage({
+          type: 'race-names',
+          names: extractNames(),
+          compatMode: compatMode,
+          perfTier: perfTier
+        }, '*');
+      } catch (err) {}
+    }
+    if (e.data.type === 'race-perf' && window.__lgCompatRuntime) {
+      window.__lgCompatRuntime.setAutoResult(e.data);
     }
     if (e.data.type === 'race-close') closeRace();
   });
