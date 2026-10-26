@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V7</title>
+<title>随机人员生成器 V7.8</title>
 <link rel="icon" href="data:,">
 <script>
 /* 版本渠道：尽早读取上次选择并跳转，避免页面先渲染再闪跳。
@@ -3553,7 +3553,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
     <div class="ob-card glass mat-modal">
       <div class="ob-top">
-        <div class="ob-brand">随机人员生成器 <b>V7</b></div>
+        <div class="ob-brand">随机人员生成器 <b>V7.8</b></div>
         <div class="ob-dots" role="tablist" aria-label="引导页切换">
           <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
           <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
@@ -3935,7 +3935,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V7</div>
+    <div id="title">随机人员生成器 V7.8</div>
     <button id="complianceDot" type="button" aria-label="合规状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
   </div>
@@ -4144,8 +4144,14 @@ html[data-theme="dark"] #resetDefaultsToast {
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V7
+      版本号：V7.8
       更新日志：
+      V7.8
+      · 3D 赛车新增自动性能适配：进入场景时静默检测设备能力与帧率，自动分为 High / Medium / Low 三档
+      · 低端档自动关闭实时阴影、反射、光晕和多余粒子，降低模型面数与渲染分辨率，弱 WebGL 环境回退 WebGL1
+      · 运行中持续监测帧率，持续低于 45 FPS 时自动二次降级；低端档限制 60 FPS
+      · 兼容模式升级为「自动 / 开 / 关」三档：自动接收赛车性能判定，手动选择优先
+      · 赛车页左下角新增 Performance / AutoAdjust 状态行
       V7
       · 3D 赛车抽取全面升级：流线型超跑、夜赛城市、路面随机名单、刹车停名、镜头转场与立牌揭晓
       · 新增左下速度表、挡位与 N₂O 氮气条；氮气加速、碾过名字回充、刹停抽选
@@ -4305,7 +4311,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="updateOverlay" class="scrim">
     <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <div id="updateTitle" class="update-title">检测到新版本</div>
-      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V7</span></div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V7.8</span></div>
       <div id="updateLog" class="update-log"></div>
       <div class="confirm-btns">
         <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
@@ -4315,7 +4321,7 @@ html[data-theme="dark"] #resetDefaultsToast {
 
   <!-- 左下角常驻：版本 + 版权（不可关闭）；性能信息由设置项控制 -->
   <div id="appFooter" aria-hidden="true">
-    <span class="af-ver" id="footerVer">V 7</span>
+    <span class="af-ver" id="footerVer">V 7.8</span>
     <span class="af-sep">|</span>
     <span class="af-copy">Qicny © All Rights Reserved</span>
     <span id="perfInfo" hidden></span>
@@ -8832,8 +8838,8 @@ html[data-theme="dark"] #resetDefaultsToast {
    ========================================================== */
 (function () {
   'use strict';
-  var APP_VERSION = '7.0.0';  // 本地版本（与仓库根目录 version.json 对比）
-  var DISPLAY_VERSION = 'V7';
+  var APP_VERSION = '7.8';  // 本地版本（与仓库根目录 version.json 对比）
+  var DISPLAY_VERSION = 'V7.8';
   var PERF_KEY = 'lottery_perf_v1';
 
   function $(id) { return document.getElementById(id); }
