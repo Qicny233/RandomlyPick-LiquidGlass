@@ -191,6 +191,57 @@ body.perf-low .turn-btn{
 .audio-range::-moz-range-progress{ height:3px; border-radius:3px; background:rgba(126,211,228,.55); }
 .audio-range::-moz-range-thumb{ width:13px; height:13px; border:0; border-radius:50%; background:#d7ebf2; box-shadow:0 0 8px rgba(126,211,228,.40); }
 
+/* ---------- 贝利亚分支（佳乐庆典专属） ---------- */
+.belial-entry{
+  position:fixed; top:calc(64px + env(safe-area-inset-top)); left:calc(18px + env(safe-area-inset-left));
+  z-index:31; display:inline-flex; align-items:center; gap:7px;
+  padding:8px 14px; border-radius:999px; cursor:pointer;
+  border:1px solid rgba(220,120,120,.28);
+  background:linear-gradient(180deg, rgba(30,14,22,.66), rgba(14,8,16,.54));
+  backdrop-filter:blur(16px) saturate(1.1); -webkit-backdrop-filter:blur(16px) saturate(1.1);
+  color:#e8c4c4; font-size:11px; font-weight:700; letter-spacing:2px;
+  box-shadow:0 10px 26px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.05);
+  transition:transform .18s var(--spring), border-color .18s, background .18s, color .18s;
+}
+.belial-entry[hidden]{ display:none; }
+.belial-entry::before{
+  content:''; width:5px; height:5px; border-radius:50%;
+  background:#ff7a6a; box-shadow:0 0 8px rgba(255,110,90,.7);
+}
+.belial-entry:hover{ border-color:rgba(255,140,120,.5); color:#ffe0d6; }
+.belial-entry:active{ transform:scale(.95); }
+.belial-entry.active{
+  border-color:rgba(255,150,120,.55); color:#fff;
+  background:linear-gradient(180deg, rgba(58,20,24,.78), rgba(24,9,14,.66));
+}
+.belial-status{
+  margin-top:8px; padding-top:7px;
+  border-top:1px solid rgba(150,192,216,.09);
+  display:flex; flex-direction:column; gap:3px;
+  font-family:var(--mono); font-size:7.5px; line-height:1.4; letter-spacing:.2px;
+  color:#c98f8f; word-break:break-word;
+}
+.belial-status[hidden]{ display:none; }
+.belial-status.failed{ color:#d8a07d; }
+.belial-status a{ color:#8fa6b8; text-decoration:none; font-size:6.8px; letter-spacing:0; opacity:.85; }
+.belial-status a:hover{ color:#cfdde8; text-decoration:underline; }
+body.belial-mode[data-phase="running"]{ cursor:crosshair; }
+body.belial-mode button, body.belial-mode a{ cursor:pointer; }
+body.belial-cine{ cursor:default; }
+body.belial-cine .controls,
+body.belial-cine .drive-hint,
+body.belial-cine .turn-btn{
+  opacity:0 !important; visibility:hidden !important; pointer-events:none !important;
+}
+body.belial-cine .speedo{ opacity:.24; }
+@media (max-width:760px){
+  .belial-entry{
+    top:calc(56px + env(safe-area-inset-top)); left:calc(12px + env(safe-area-inset-left));
+    padding:7px 11px; font-size:9.5px; letter-spacing:1.4px;
+  }
+  .belial-status{ font-size:6.8px; }
+}
+
 /* ---------- 开始面板 ---------- */
 .start-panel{
   position:fixed; left:50%; bottom:clamp(56px, 10vh, 108px); z-index:20;
@@ -758,6 +809,8 @@ body[data-phase="crash"] .hud-brand .brand-dot{ background:#ff7a6a; }
     <div class="start-hint jiale-secret">三击顶部 · 佳乐庆典</div>
   </section>
 
+  <button id="belialBtn" class="belial-entry" type="button" hidden>贝利亚试炼</button>
+
   <aside id="speedo" class="speedo" aria-label="速度表">
     <div class="speedo-top"><span>SPEED</span><span id="nitroState">N₂O READY</span></div>
     <svg viewBox="0 0 220 200" aria-hidden="true">
@@ -802,6 +855,10 @@ body[data-phase="crash"] .hud-brand .brand-dot{ background:#ff7a6a; }
       <div class="nitro-track"><i id="nitroFill"></i></div>
     </div>
     <div id="perfLine" class="perf-line" data-tier="high">Performance：—｜AutoAdjust：On</div>
+    <div id="belialStatus" class="belial-status" hidden>
+      <span id="belialStatusText">贝利亚模型加载中</span>
+      <a id="belialCredit" href="https://sketchfab.com/3d-models/ultraman-belial-official-one-f0eaa001a2714156b1f739332419187c" target="_blank" rel="noopener noreferrer">模型：chaosFerEBIRTH · CC BY 4.0</a>
+    </div>
   </aside>
 
   <button id="turnBtn" class="turn-btn" type="button" aria-label="限时拐弯">
@@ -853,6 +910,7 @@ body[data-phase="crash"] .hud-brand .brand-dot{ background:#ff7a6a; }
 
 <!-- Three.js r160 经典脚本构建：file:// 双击与 http 部署均可用 -->
 <script src="three.global.min.js"></script>
+<script src="gltf/GLTFLoader.js"></script>
 <script type="module">
 'use strict';
 
@@ -1250,6 +1308,28 @@ const JIALE_HEMI_BASE = THREE ? new THREE.Color(0x89c7ff) : null;
 const JIALE_HEMI_WARM = THREE ? new THREE.Color(0xffb0a0) : null;
 const JIALE_GATE_BASE = THREE ? new THREE.Color(0x4fe8ff) : null;
 const JIALE_GATE_WARM = THREE ? new THREE.Color(0xff9a6a) : null;
+
+/* 贝利亚分支（佳乐庆典专属） */
+let belialMode = false;
+let belialPhase = 'off'; // off | run | stop | blast | knock | result | zoom | title
+let belialGroup = null, belialModel = null, belialAura = null, belialRing = null;
+let belialFlames = null, belialBeam = null, belialBeamCore = null;
+let belialTextGroup = null, belialTextMesh = null, belialTextMat = null, belialTextGlow = null;
+let belialLoadState = 'idle'; // idle | loading | ready | failed
+let belialLoadPercent = 0, belialLoadToken = 0, belialLoadError = '';
+let belialModelUrls = null, belialPreloaded = null, belialTierSeen = '';
+let belialHeadLocal = null, belialMouthLocal = null, belialTextLocal = null;
+let belialHeight = 0;
+let belialStopT = 0, belialStopFrom = 0, belialStopDur = 0, belialStartZ = 0;
+let belialBlastT = 0, belialKnockT = 0, belialResultT = 0, belialZoomT = 0, belialTitleT = 0, belialStageT = 0;
+let belialFlameAcc = 0;
+let belialCarPose = null;
+let belialWinner = '';
+let belialTextWidth = 1;
+let belialCam = null;
+let belialFinalDockShown = false;
+let belialHiddenScenery = [];
+let belialEntryEl = null, belialStatusEl = null, belialStatusTextEl = null, belialCreditEl = null;
 
 /* 摄像机 */
 const camPos = { x: 0, y: 0, z: 0 };
@@ -2829,7 +2909,7 @@ function resetJialeRound(){
   jialeFireworkT = 0;
   jialeConfettiT = 0;
   roadMarkMeshes.forEach(m=>{ m.visible = !jialeMode; });
-  if(nameGroup) nameGroup.visible = true;
+  if(nameGroup) nameGroup.visible = !belialMode;
   if(jialeDecor) jialeDecor.visible = jialeMode || jialeMix > .02;
 }
 
@@ -2839,6 +2919,8 @@ function enterJiale(){
   jialeMode = true;
   jialeMixTarget = 1;
   document.body.classList.add('jiale-mode');
+  updateBelialEntry();
+  preloadBelialModel();
   if(jialeDecor) jialeDecor.visible = true;
   roadMarkMeshes.forEach(m=>{ m.visible = false; });
   if(nameGroup) nameGroup.visible = true;
@@ -2855,6 +2937,8 @@ function enterJiale(){
 
 function exitJiale(){
   if(!jialeMode) return;
+  if(belialMode) exitBelial();
+  disposeBelialStage();
   jialeMode = false;
   jialeMixTarget = 0;
   document.body.classList.remove('jiale-mode');
@@ -2862,6 +2946,7 @@ function exitJiale(){
   setJialeResultCopy(false);
   roadMarkMeshes.forEach(m=>{ m.visible = true; });
   if(nameGroup) nameGroup.visible = true;
+  updateBelialEntry();
   showJialeToast('已退出佳乐庆典');
   if(phase === 'reveal'){
     hideResult();
@@ -3139,7 +3224,7 @@ function updateJiale(dt){
   }
 
   if(jialeConfetti) jialeConfetti.update(dt);
-  if(jialeMix > .35){
+  if(jialeMix > .35 && !belialMode){
     jialeFireworkT -= dt;
     if(jialeFireworkT <= 0 && phase === 'running'){
       jialeFireworkT = 2.0 + Math.random() * 2.6;
@@ -3156,7 +3241,1282 @@ function updateJiale(dt){
       }
     }
   }
+  if(belialMode) updateBelialAtmosphere(dt);
 }
+
+/* ============================================================
+   贝利亚分支（佳乐庆典专属）
+   普通赛车 / 佳乐庆典的原有逻辑不经过这里；只有 belialMode 打开时
+   才会由 updateRace / updateCar / updateCamera 转入独立分支。
+   模型：Ultraman belial (official One) by chaosFerEBIRTH, CC BY 4.0
+   ============================================================ */
+const BELIAL_MODEL_URLS = [
+  './assets/belial/scene.gltf',
+  './assets/belial.glb',
+  './assets/belial/scene.glb',
+  './assets/scene.glb'
+];
+const BELIAL_TARGET_H = 150;
+const BELIAL_DIST = 300;
+const BELIAL_TEXT_H = 9;
+const BELIAL_ZOOM_DUR = 2.9;
+const BELIAL_TITLE_DUR = 2.2;
+const BELIAL_FOG = THREE ? new THREE.Color(0x140a16) : null;
+const BELIAL_SUN = THREE ? new THREE.Color(0xff7a5c) : null;
+const BELIAL_PALETTE = [[1,.86,.5],[1,.46,.24],[1,.2,.16],[.8,.08,.12]];
+const BELIAL_TEXT_GLYPHS = [["周",["M 304 754 Q 291 763 271 770 Q 249 779 237 773 Q 225 764 233 751 Q 254 723 259 662 Q 259 443 239 339 Q 235 321 231 302 Q 201 197 125 49 Q 121 42 119 35 Q 118 23 128 26 Q 164 38 232 169 Q 247 200 260 235 Q 317 391 318 600 Q 321 703 323 708 C 325 738 326 742 304 754 Z","M 323 708 Q 333 708 345 710 Q 691 779 720 746 Q 736 737 742 664 Q 761 421 749 145 Q 748 103 733 93 Q 717 83 642 105 Q 626 109 626 99 Q 627 92 640 84 Q 707 33 741 -5 Q 763 -26 776 -23 Q 789 -20 801 10 Q 817 56 817 126 Q 796 514 798 659 Q 799 702 811 727 Q 824 751 813 764 Q 801 780 750 806 Q 723 818 674 802 Q 494 768 304 754 C 274 752 293 704 323 708 Z","M 533 563 Q 650 588 655 592 Q 662 599 659 606 Q 652 616 627 622 Q 608 626 537 605 L 491 593 Q 446 586 400 580 Q 369 576 391 560 Q 421 544 489 554 Q 490 554 492 554 L 533 563 Z","M 526 491 Q 529 528 533 563 L 537 605 Q 537 617 539 627 Q 542 643 544 656 Q 553 681 537 694 Q 509 709 491 712 Q 478 713 472 708 Q 466 702 472 690 Q 487 671 491 593 L 492 554 Q 492 520 492 484 C 492 454 524 461 526 491 Z","M 492 484 Q 426 474 349 459 Q 333 456 346 443 Q 373 421 403 429 Q 514 460 659 463 Q 672 463 684 464 Q 700 465 704 472 Q 708 482 694 492 Q 646 525 593 507 Q 563 501 526 491 L 492 484 Z","M 414 353 Q 404 359 374 365 Q 362 368 359 363 Q 352 359 360 342 Q 384 291 397 209 Q 398 184 413 167 Q 429 146 435 161 Q 439 171 439 190 L 436 221 Q 426 297 424 323 C 422 349 422 349 414 353 Z","M 627 243 Q 648 310 677 330 Q 692 348 678 363 Q 662 376 614 398 Q 598 405 578 397 Q 523 373 414 353 C 385 347 394 318 424 323 Q 434 324 448 328 Q 509 338 567 350 Q 583 354 589 348 Q 599 338 582 254 C 576 225 618 214 627 243 Z","M 439 190 Q 443 190 446 188 Q 456 185 471 188 Q 523 201 636 211 Q 646 212 648 222 Q 648 229 627 243 C 608 256 608 256 582 254 Q 575 254 565 251 Q 493 230 436 221 C 406 216 410 198 439 190 Z"]],["佳",["M 284 524 Q 416 720 418 724 Q 417 728 416 732 Q 412 745 381 772 Q 351 791 331 792 Q 310 791 319 766 Q 334 732 320 705 Q 247 534 84 346 Q 72 334 70 328 Q 66 315 82 318 Q 124 327 256 488 L 284 524 Z","M 256 488 Q 280 428 280 369 Q 280 227 251 111 Q 238 65 273 13 Q 274 9 279 5 Q 298 -13 311 17 Q 327 60 326 110 Q 326 374 335 433 Q 344 463 332 474 Q 293 519 284 524 C 261 544 245 516 256 488 Z","M 653 564 Q 791 594 799 601 Q 808 608 803 617 Q 796 627 768 635 Q 740 641 656 611 L 602 597 Q 550 587 493 580 Q 457 574 483 558 Q 516 537 588 551 Q 594 552 603 553 L 653 564 Z","M 646 450 Q 650 508 653 564 L 656 611 Q 657 690 677 773 Q 680 783 659 799 Q 622 818 597 823 Q 581 826 572 817 Q 565 810 573 794 Q 595 764 595 743 Q 599 673 602 597 L 603 553 Q 603 501 602 442 C 602 412 644 420 646 450 Z","M 624 409 Q 726 425 877 426 Q 896 427 900 435 Q 904 447 889 459 Q 831 496 788 480 Q 730 467 646 450 L 602 442 Q 506 426 399 409 Q 380 406 394 391 Q 407 378 425 374 Q 444 370 459 375 Q 517 393 583 402 L 624 409 Z","M 655 228 Q 692 237 733 243 Q 772 252 778 257 Q 787 264 783 272 Q 776 284 748 292 Q 727 296 657 277 L 601 263 Q 598 264 597 263 Q 545 253 482 248 Q 446 242 471 226 Q 508 201 576 216 Q 586 219 601 219 L 655 228 Z","M 648 100 Q 651 169 655 228 L 657 277 Q 660 376 661 377 Q 660 380 659 380 Q 641 399 624 409 C 599 425 573 430 583 402 Q 601 353 601 263 L 601 219 Q 601 168 601 94 C 601 64 647 70 648 100 Z","M 601 94 Q 492 82 366 68 Q 344 65 360 47 Q 375 32 394 26 Q 416 20 434 24 Q 585 63 879 62 Q 895 62 912 60 Q 934 60 939 69 Q 945 82 927 97 Q 872 139 831 131 Q 761 118 648 100 L 601 94 Z"]],["乐",["M 340 603 Q 497 651 596 702 Q 644 721 685 731 Q 704 732 707 740 Q 711 752 698 763 Q 676 779 628 798 Q 612 805 598 804 Q 591 800 589 788 Q 589 742 331 622 C 304 609 311 594 340 603 Z","M 331 622 Q 309 647 277 659 Q 261 665 252 655 Q 246 649 257 630 Q 276 599 273 555 Q 270 447 232 395 Q 219 379 225 367 Q 232 345 252 328 Q 265 316 283 331 Q 346 374 511 392 L 566 398 Q 669 408 799 396 Q 823 392 833 399 Q 840 405 835 418 Q 829 431 788 456 Q 764 471 690 458 Q 656 457 565 445 L 510 438 Q 422 428 334 408 Q 315 402 312 408 Q 303 415 308 435 Q 324 558 338 592 Q 339 598 340 603 C 342 612 342 612 331 622 Z","M 511 392 Q 517 116 494 97 Q 484 90 469 94 Q 423 104 379 116 Q 366 117 367 110 Q 368 103 380 94 Q 471 24 504 -19 Q 520 -38 537 -22 Q 577 20 573 94 Q 569 137 566 398 L 565 445 Q 566 491 578 523 Q 588 544 569 558 Q 541 580 508 592 Q 489 599 479 590 Q 473 583 485 566 Q 510 524 509 478 Q 509 459 510 438 L 511 392 Z","M 292 261 Q 249 203 196 154 Q 166 124 175 84 Q 179 63 204 71 Q 232 81 255 111 Q 291 153 303 194 Q 318 227 317 255 Q 314 265 308 268 Q 299 269 292 261 Z","M 692 252 Q 752 185 822 90 Q 838 65 854 59 Q 864 56 873 67 Q 889 80 880 131 Q 871 200 696 287 Q 687 294 683 280 Q 682 265 692 252 Z"]]];
+
+const belialHeadWorldV = THREE ? new THREE.Vector3() : null;
+const belialMouthWorldV = THREE ? new THREE.Vector3() : null;
+const belialAimV = THREE ? new THREE.Vector3() : null;
+const belialDirV = THREE ? new THREE.Vector3() : null;
+const belialMidV = THREE ? new THREE.Vector3() : null;
+const belialQuat = THREE ? new THREE.Quaternion() : null;
+const belialUpV = THREE ? new THREE.Vector3(0,1,0) : null;
+const belialTmpV1 = THREE ? new THREE.Vector3() : null;
+const belialTmpV2 = THREE ? new THREE.Vector3() : null;
+const belialTmpV3 = THREE ? new THREE.Vector3() : null;
+const belialDrawSize = THREE ? new THREE.Vector2() : null;
+
+/* ---------- 入口 / 状态提示 ---------- */
+function updateBelialEntry(){
+  if(!belialEntryEl) return;
+  belialEntryEl.hidden = !jialeMode;
+  belialEntryEl.classList.toggle('active', belialMode);
+  belialEntryEl.textContent = belialMode ? '退出贝利亚' : '贝利亚试炼';
+}
+
+function updateBelialStatus(){
+  if(!belialStatusEl) return;
+  const show = belialMode || belialLoadState === 'loading';
+  belialStatusEl.hidden = !show;
+  if(!show) return;
+  belialStatusEl.classList.toggle('failed', belialLoadState === 'failed');
+  if(belialCreditEl) belialCreditEl.hidden = belialLoadState !== 'ready';
+  if(!belialStatusTextEl) return;
+  if(belialLoadState === 'loading'){
+    belialStatusTextEl.textContent = '贝利亚模型加载中' + (belialLoadPercent > 0 ? ' ' + belialLoadPercent + '%' : '');
+  }else if(belialLoadState === 'ready'){
+    belialStatusTextEl.textContent = '贝利亚模型已就绪';
+  }else if(belialLoadState === 'failed'){
+    belialStatusTextEl.textContent = (location.protocol === 'file:')
+      ? '贝利亚模型需通过 http(s) 访问 · 已降级'
+      : '贝利亚模型加载失败 · 已降级';
+  }else{
+    belialStatusTextEl.textContent = '贝利亚模型加载中';
+  }
+}
+
+/* ---------- 模型加载 ---------- */
+function preloadBelialModel(){
+  if(!jialeMode) return;
+  if(belialLoadState === 'idle') loadBelialModel();
+}
+
+function loadBelialModel(){
+  if(belialLoadState === 'loading' || belialLoadState === 'ready') return;
+  if(belialPreloaded){ belialLoadState = 'ready'; belialLoadPercent = 100; updateBelialStatus(); return; }
+  if(!THREE || !window.GLTFLoader){
+    belialLoadState = 'failed';
+    belialLoadError = 'GLTFLoader unavailable';
+    updateBelialStatus();
+    return;
+  }
+  belialLoadState = 'loading';
+  belialLoadPercent = 0;
+  belialLoadError = '';
+  updateBelialStatus();
+  const token = ++belialLoadToken;
+  const urls = (belialModelUrls || BELIAL_MODEL_URLS).slice();
+  const loader = new window.GLTFLoader();
+  let index = 0;
+
+  const failAll = (err) => {
+    if(token !== belialLoadToken) return;
+    belialLoadState = 'failed';
+    belialLoadError = (err && (err.message || err.type || String(err))) || 'unknown';
+    console.warn('[belial] model load failed', err);
+    updateBelialStatus();
+    if(belialMode) showJialeToast('贝利亚模型加载失败，已降级运行');
+  };
+  const next = () => {
+    if(token !== belialLoadToken) return;
+    if(index >= urls.length){ failAll(new Error('all model urls failed')); return; }
+    const url = urls[index++];
+    loader.load(url, (gltf) => {
+      if(token !== belialLoadToken){
+        if(gltf && gltf.scene) disposeBelialObject(gltf.scene);
+        return;
+      }
+      onBelialModelLoaded(gltf);
+    }, (ev) => {
+      if(token !== belialLoadToken) return;
+      if(ev && ev.total) belialLoadPercent = Math.min(99, Math.round(ev.loaded / ev.total * 100));
+      updateBelialStatus();
+    }, () => { next(); });
+  };
+  next();
+}
+
+function onBelialModelLoaded(gltf){
+  const root = gltf && (gltf.scene || (gltf.scenes && gltf.scenes[0]));
+  if(!root){
+    belialLoadState = 'failed';
+    belialLoadError = 'empty gltf';
+    updateBelialStatus();
+    return;
+  }
+  fitBelialModel(root);
+  belialLoadState = 'ready';
+  belialLoadPercent = 100;
+  updateBelialStatus();
+  if(belialGroup){
+    addBelialModel(root);
+  }else{
+    belialPreloaded = root;
+  }
+}
+
+function addBelialModel(root){
+  if(!belialGroup || !root) return;
+  belialGroup.add(root);
+  belialModel = root;
+  belialPreloaded = null;
+}
+
+function fitBelialModel(root){
+  root.position.set(0, 0, 0);
+  root.rotation.set(0, 0, 0);
+  root.scale.set(1, 1, 1);
+  root.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(root);
+  let size = box.getSize(new THREE.Vector3());
+  if(!isFinite(size.y) || size.y <= .0001){
+    box.setFromObject(root, true);
+    size = box.getSize(new THREE.Vector3());
+  }
+  const s = BELIAL_TARGET_H / Math.max(size.y, .001);
+  root.scale.setScalar(s);
+  root.updateMatrixWorld(true);
+  box.setFromObject(root);
+  const c = box.getCenter(new THREE.Vector3());
+  root.position.x -= c.x;
+  root.position.z -= c.z;
+  root.position.y -= box.min.y;
+  root.rotation.y = Math.PI;          // 面朝赛车（-Z）
+  root.updateMatrixWorld(true);
+  box.setFromObject(root);
+
+  belialHeight = Math.max(1, box.max.y - box.min.y);
+  const depth = Math.max(1, box.max.z - box.min.z);
+  belialHeadLocal = new THREE.Vector3(
+    0,
+    box.max.y * .90,
+    box.min.z + depth * .05
+  );
+  belialMouthLocal = new THREE.Vector3(
+    0,
+    box.max.y * .835,
+    box.min.z + depth * .03
+  );
+  belialTextLocal = new THREE.Vector3(
+    0,
+    box.max.y + BELIAL_TEXT_H * .55,
+    box.min.z - Math.max(2.5, belialHeight * .022)
+  );
+
+  const aniso = PERF.tier === 'high' ? 4 : 1;
+  root.traverse((o) => {
+    o.castShadow = false;
+    o.receiveShadow = false;
+    o.frustumCulled = false;
+    if(!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => {
+      if(!m) return;
+      if(m.map){
+        m.map.anisotropy = aniso;
+        m.map.needsUpdate = true;
+      }
+      m.needsUpdate = true;
+    });
+  });
+  console.info('[belial] model fitted', {
+    height: +belialHeight.toFixed(2),
+    depth: +depth.toFixed(2),
+    scale: +s.toFixed(4)
+  });
+}
+
+/* ---------- 舞台 ---------- */
+function buildBelialStage(){
+  if(belialGroup || !scene) return;
+  belialGroup = new THREE.Group();
+  belialGroup.position.set(trackX(carZ + BELIAL_DIST), 0, carZ + BELIAL_DIST);
+  scene.add(belialGroup);
+
+  if(glowTex){
+    const auraMat = new THREE.SpriteMaterial({
+      map: glowTex, color: 0x9a2438, transparent: true, opacity: .40,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
+    });
+    belialAura = new THREE.Sprite(auraMat);
+    belialAura.scale.set(BELIAL_TARGET_H * 2.3, BELIAL_TARGET_H * 2.3, 1);
+    belialAura.position.set(0, BELIAL_TARGET_H * .55, BELIAL_TARGET_H * .12);
+    belialGroup.add(belialAura);
+  }
+
+  if(PERF.tier !== 'low'){
+    const ringGeo = new THREE.RingGeometry(BELIAL_TARGET_H * .44, BELIAL_TARGET_H * .462, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xff6a42, transparent: true, opacity: .18, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
+    });
+    belialRing = new THREE.Mesh(ringGeo, ringMat);
+    belialRing.position.set(0, BELIAL_TARGET_H * .58, BELIAL_TARGET_H * .13);
+    belialGroup.add(belialRing);
+  }
+
+  ensureBelialBeam();
+  if(!belialFlames) belialFlames = createBelialFlames(belialFlamePoolSize());
+  if(belialPreloaded){
+    addBelialModel(belialPreloaded);
+  }else if(belialModel){
+    addBelialModel(belialModel);
+  }
+  belialTierSeen = PERF.tier;
+  updateBelialStatus();
+}
+
+function belialFlamePoolSize(){
+  return PERF.tier === 'high' ? 900 : PERF.tier === 'medium' ? 480 : 240;
+}
+
+function ensureBelialBeam(){
+  if(belialBeam || !scene) return;
+  /* 火柱只画到赛车前方一小段，靠粒子补完最后 40 个单位，
+     否则锥体在镜头附近会被透视放大成一块白板。 */
+  const geo = new THREE.CylinderGeometry(.5, .2, 1, 8, 1, true);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xff6a2a, transparent: true, opacity: 0, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
+  });
+  belialBeam = new THREE.Mesh(geo, mat);
+  belialBeam.visible = false;
+  belialBeam.frustumCulled = false;
+  belialBeam.renderOrder = 10;
+  scene.add(belialBeam);
+
+  if(PERF.tier !== 'low'){
+    const coreGeo = new THREE.CylinderGeometry(.18, .07, 1, 8, 1, true);
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffe6b8, transparent: true, opacity: 0, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false
+    });
+    belialBeamCore = new THREE.Mesh(coreGeo, coreMat);
+    belialBeamCore.visible = false;
+    belialBeamCore.frustumCulled = false;
+    belialBeamCore.renderOrder = 11;
+    scene.add(belialBeamCore);
+  }
+}
+
+/* ---------- 火焰粒子 ---------- */
+function createBelialFlames(max){
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(max * 3);
+  const colors = new Float32Array(max * 3);
+  const sizes = new Float32Array(max);
+  for(let i = 0; i < max; i++) pos[i * 3 + 1] = -9999;
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uScale: { value: 640 },
+      uOpacity: { value: 1 }
+    },
+    vertexShader: `
+      attribute vec3 aColor;
+      attribute float aSize;
+      varying vec3 vColor;
+      uniform float uScale;
+      void main(){
+        vColor = aColor;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = clamp(aSize * uScale / max(1.0, -mv.z), 1.0, 52.0);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform float uOpacity;
+      varying vec3 vColor;
+      void main(){
+        vec2 uv = gl_PointCoord - vec2(0.5);
+        float d = length(uv * vec2(1.0, 0.82));
+        float glow = smoothstep(0.6, 0.0, d);
+        if(glow < 0.01) discard;
+        float core = smoothstep(0.28, 0.0, d);
+        vec3 col = vColor * glow + vec3(1.0, 0.9, 0.68) * core * 0.55;
+        gl_FragColor = vec4(col * uOpacity, glow);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  points.renderOrder = 12;
+  scene.add(points);
+
+  const vel = new Float32Array(max * 3);
+  const life = new Float32Array(max);
+  const maxLife = new Float32Array(max);
+  const baseCol = new Float32Array(max * 3);
+  const baseSize = new Float32Array(max);
+  let cursor = 0;
+  let alive = 0;
+
+  function spawnOne(x, y, z, vx, vy, vz, lifeSpan, size, col){
+    const i = cursor;
+    cursor = (cursor + 1) % max;
+    pos[i * 3] = x; pos[i * 3 + 1] = y; pos[i * 3 + 2] = z;
+    vel[i * 3] = vx; vel[i * 3 + 1] = vy; vel[i * 3 + 2] = vz;
+    life[i] = lifeSpan;
+    maxLife[i] = lifeSpan;
+    baseCol[i * 3] = col[0]; baseCol[i * 3 + 1] = col[1]; baseCol[i * 3 + 2] = col[2];
+    baseSize[i] = size;
+    colors[i * 3] = col[0]; colors[i * 3 + 1] = col[1]; colors[i * 3 + 2] = col[2];
+    sizes[i] = size;
+  }
+
+  function pickColor(){
+    const c = BELIAL_PALETTE[(Math.random() * BELIAL_PALETTE.length) | 0];
+    if(Math.random() < .08) return [1, .97, .86];
+    return c;
+  }
+
+  function spawnJet(origin, dir, count, speed, spread, travel){
+    /* 寿命按喷射距离取，粒子刚好在赛车附近熄灭，不会穿过镜头变成大光斑 */
+    const baseLife = travel ? clamp(travel / Math.max(1, speed), .5, 1.7) : 1.0;
+    for(let n = 0; n < count; n++){
+      const jitter = .55;
+      const ox = origin.x + (Math.random() - .5) * jitter * 2.2;
+      const oy = origin.y + (Math.random() - .5) * jitter * 2.2;
+      const oz = origin.z + (Math.random() - .5) * jitter * 2.2;
+      const sp = speed * (0.88 + Math.random() * .24);
+      const sx = (Math.random() - .5) * spread;
+      const sy = (Math.random() - .5) * spread;
+      const vx = dir.x * sp + sx * sp;
+      const vy = dir.y * sp + sy * sp;
+      const vz = dir.z * sp + sx * sp * .5;
+      spawnOne(ox, oy, oz, vx, vy, vz,
+        baseLife * (0.86 + Math.random() * .26),
+        3.0 + Math.random() * 5.6, pickColor());
+    }
+  }
+
+  function spawnBurst(x, y, z, count, palette, speed){
+    for(let n = 0; n < count; n++){
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const sp = speed * (0.35 + Math.random() * .9);
+      const vx = Math.sin(phi) * Math.cos(theta) * sp;
+      const vy = Math.cos(phi) * sp + 3;
+      const vz = Math.sin(phi) * Math.sin(theta) * sp;
+      const c = palette[(Math.random() * palette.length) | 0];
+      spawnOne(x + (Math.random() - .5) * 2.2, y + (Math.random() - .5) * 2.2, z + (Math.random() - .5) * 2.2,
+        vx, vy, vz, .75 + Math.random() * .75, 1.8 + Math.random() * 3.4, c);
+    }
+  }
+
+  function reset(){
+    for(let i = 0; i < max; i++){
+      life[i] = 0;
+      pos[i * 3 + 1] = -9999;
+      sizes[i] = 0;
+    }
+    alive = 0;
+    cursor = 0;
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.aSize.needsUpdate = true;
+    geo.attributes.aColor.needsUpdate = true;
+    points.visible = false;
+  }
+
+  function update(dt){
+    let living = 0;
+    const drag = Math.max(0, 1 - .32 * dt);
+    for(let i = 0; i < max; i++){
+      if(life[i] <= 0) continue;
+      life[i] -= dt;
+      if(life[i] <= 0){
+        sizes[i] = 0;
+        pos[i * 3 + 1] = -9999;
+        continue;
+      }
+      living++;
+      const k = life[i] / maxLife[i];
+      const i3 = i * 3;
+      vel[i3] *= drag;
+      vel[i3 + 1] = vel[i3 + 1] * drag + 2.2 * dt;
+      vel[i3 + 2] *= drag;
+      pos[i3] += vel[i3] * dt;
+      pos[i3 + 1] += vel[i3 + 1] * dt;
+      pos[i3 + 2] += vel[i3 + 2] * dt;
+      const fade = .28 + .72 * k;
+      colors[i3] = baseCol[i3] * fade;
+      colors[i3 + 1] = baseCol[i3 + 1] * fade;
+      colors[i3 + 2] = baseCol[i3 + 2] * fade;
+      sizes[i] = baseSize[i] * (.35 + .65 * k);
+    }
+    alive = living;
+    points.visible = living > 0;
+    if(living > 0 || cursor !== 0){
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.aSize.needsUpdate = true;
+      geo.attributes.aColor.needsUpdate = true;
+    }
+    if(renderer && camera){
+      renderer.getDrawingBufferSize(belialDrawSize);
+      mat.uniforms.uScale.value = belialDrawSize.y * .5 / Math.tan(camera.fov * Math.PI / 360);
+    }
+  }
+
+  function dispose(){
+    if(scene) scene.remove(points);
+    geo.dispose();
+    mat.dispose();
+  }
+
+  return { points, spawnJet, spawnBurst, reset, update, dispose, get alive(){ return alive; } };
+}
+
+/* ---------- 3D 文字：周佳乐 ---------- */
+function parseBelialGlyph(d, ox){
+  const toks = d.match(/[MLQCZ]|-?\d+(?:\.\d+)?/g);
+  if(!toks) return null;
+  const shape = new THREE.Shape();
+  let cmd = '';
+  let i = 0;
+  const X = (v) => v + ox;
+  /* 字形轮廓本身是 y-up（Arphic 坐标系），不要翻转，否则三个字会上下颠倒 */
+  const Y = (v) => v;
+  while(i < toks.length){
+    const t = toks[i];
+    if(t === 'Z'){ shape.closePath(); cmd = ''; i++; continue; }
+    if(t === 'M' || t === 'L' || t === 'Q' || t === 'C'){ cmd = t; i++; continue; }
+    if(cmd === 'M' || cmd === 'L'){
+      const x = +toks[i++], y = +toks[i++];
+      if(cmd === 'M'){ shape.moveTo(X(x), Y(y)); cmd = 'L'; }
+      else shape.lineTo(X(x), Y(y));
+    }else if(cmd === 'Q'){
+      const cx = +toks[i++], cy = +toks[i++], ex = +toks[i++], ey = +toks[i++];
+      shape.quadraticCurveTo(X(cx), Y(cy), X(ex), Y(ey));
+    }else if(cmd === 'C'){
+      const c1x = +toks[i++], c1y = +toks[i++], c2x = +toks[i++], c2y = +toks[i++], ex = +toks[i++], ey = +toks[i++];
+      shape.bezierCurveTo(X(c1x), Y(c1y), X(c2x), Y(c2y), X(ex), Y(ey));
+    }else{
+      i++;
+    }
+  }
+  shape.closePath();
+  return shape;
+}
+
+function mergeBelialGeometries(list){
+  let total = 0;
+  const parts = [];
+  for(const g of list){
+    const ng = g.index ? g.toNonIndexed() : g;
+    parts.push(ng);
+    total += ng.getAttribute('position').count;
+  }
+  const pos = new Float32Array(total * 3);
+  const nor = new Float32Array(total * 3);
+  let o = 0;
+  for(const g of parts){
+    const p = g.getAttribute('position');
+    const n = g.getAttribute('normal');
+    pos.set(p.array, o * 3);
+    if(n) nor.set(n.array, o * 3);
+    o += p.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  parts.forEach(g => g.dispose());
+  list.forEach(g => g.dispose());
+  return out;
+}
+
+function buildBelialText(){
+  if(belialTextGroup || !belialGroup) return;
+  const geos = [];
+  let strokeIndex = 0;
+  for(let gi = 0; gi < BELIAL_TEXT_GLYPHS.length; gi++){
+    const paths = BELIAL_TEXT_GLYPHS[gi][1];
+    for(const d of paths){
+      const shape = parseBelialGlyph(d, gi * 1024);
+      if(!shape) continue;
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth: 112,
+        bevelEnabled: true,
+        bevelThickness: 12,
+        bevelSize: 9,
+        bevelSegments: 2,
+        curveSegments: 8,
+        steps: 1
+      });
+      geo.translate(0, 0, strokeIndex * .5);
+      geos.push(geo);
+      strokeIndex++;
+    }
+  }
+  if(!geos.length) return;
+
+  const merged = mergeBelialGeometries(geos);
+  merged.computeBoundingBox();
+  const bb = merged.boundingBox;
+  const size = bb.getSize(new THREE.Vector3());
+  const center = bb.getCenter(new THREE.Vector3());
+  merged.translate(-center.x, -center.y, -center.z);
+  const s = BELIAL_TEXT_H / Math.max(size.y, .001);
+  merged.scale(s, s, s);
+  merged.computeBoundingBox();
+  belialTextWidth = merged.boundingBox.max.x - merged.boundingBox.min.x;
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uWidth: { value: Math.max(1, belialTextWidth) },
+      uOpacity: { value: 0 }
+    },
+    vertexShader: `
+      varying vec3 vPos;
+      varying vec3 vNor;
+      varying vec3 vView;
+      void main(){
+        vPos = position;
+        vNor = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vView = -mv.xyz;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uWidth;
+      uniform float uOpacity;
+      varying vec3 vPos;
+      varying vec3 vNor;
+      varying vec3 vView;
+      vec3 hue(float h){
+        vec3 k = mod(h * 6.0 + vec3(5.0, 3.0, 1.0), 6.0);
+        return clamp(min(k, 4.0 - k), 0.0, 1.0);
+      }
+      void main(){
+        float t = clamp(vPos.x / max(uWidth, 0.001) + 0.5, 0.0, 1.0);
+        vec3 rainbow = hue(fract(0.02 + t * 0.68));
+        /* 低饱和淡彩：大量掺白，只留一点颜色倾向 */
+        vec3 col = mix(vec3(1.0), rainbow, 0.38);
+        col = mix(col, vec3(1.0, 0.97, 0.94), 0.22);
+        float sweep = exp(-pow((t - fract(uTime * 0.16)) * 6.0, 2.0));
+        float rim = pow(1.0 - clamp(dot(normalize(vNor), normalize(vView)), 0.0, 1.0), 1.7);
+        col *= 1.0 + rim * 0.14;
+        col += vec3(1.0, 0.98, 0.95) * sweep * 0.20;
+        gl_FragColor = vec4(col, uOpacity);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.FrontSide,
+    toneMapped: false
+  });
+
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 20;
+  belialTextMesh = mesh;
+  belialTextMat = mat;
+
+  belialTextGroup = new THREE.Group();
+  const anchor = belialTextLocal || new THREE.Vector3(0, BELIAL_TARGET_H + BELIAL_TEXT_H * .55, -BELIAL_TARGET_H * .022);
+  belialTextGroup.position.copy(anchor);
+  belialTextGroup.rotation.order = 'YXZ';
+  belialTextGroup.add(mesh);
+
+  if(glowTex){
+    const glowMat = new THREE.SpriteMaterial({
+      map: glowTex, color: 0xffd6dc, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false
+    });
+    belialTextGlow = new THREE.Sprite(glowMat);
+    belialTextGlow.scale.set(Math.max(10, belialTextWidth * 1.45), BELIAL_TEXT_H * 2.2, 1);
+    belialTextGlow.position.z = -.8;
+    belialTextGlow.renderOrder = 19;
+    belialTextGroup.add(belialTextGlow);
+  }
+  belialTextGroup.visible = false;
+  belialGroup.add(belialTextGroup);
+}
+
+function removeBelialText(){
+  if(!belialTextGroup) return;
+  if(belialTextGroup.parent) belialTextGroup.parent.remove(belialTextGroup);
+  disposeBelialObject(belialTextGroup);
+  belialTextGroup = null;
+  belialTextMesh = null;
+  belialTextMat = null;
+  belialTextGlow = null;
+}
+
+function updateBelialText(dt){
+  if(!belialTextGroup || !belialTextMat) return;
+  const u = clamp((belialTitleT - .12) / 1.25, 0, 1);
+  const s = .03 + .97 * easeOutCubic(u) * (1 + .05 * Math.sin(u * Math.PI));
+  belialTextGroup.visible = u > 0;
+  belialTextGroup.scale.setScalar(Math.max(.001, s));
+  belialTextMat.uniforms.uOpacity.value = u;
+  belialTextMat.uniforms.uTime.value = belialStageT;
+  if(belialTextGlow) belialTextGlow.material.opacity = .16 * u;
+
+  const wp = belialTextGroup.getWorldPosition(belialTmpV3);
+  /* 面向镜头，再偏转一点，让挤出厚度露出来，读得出是立体字 */
+  belialTextGroup.rotation.y = Math.atan2(camera.position.x - wp.x, camera.position.z - wp.z) + .12;
+  const baseY = (belialTextLocal ? belialTextLocal.y : BELIAL_TARGET_H + BELIAL_TEXT_H * .55);
+  belialTextGroup.position.y = baseY + Math.sin(belialStageT * 1.35) * .12 * u;
+}
+
+/* ---------- 阶段切换 ---------- */
+function beginBelialStop(){
+  if(!belialMode || belialPhase !== 'run' || phase !== 'running') return;
+  belialStopT = 0;
+  belialStopFrom = Math.max(vel, 4);
+  belialStopDur = clamp(1.35 + belialStopFrom * .028, 1.5, 2.9);
+  belialStartZ = carZ;
+  stopTargetZ = carZ + belialStopFrom * belialStopDur * .5;
+  stopTargetIndex = -1;
+  stopDecel = 0;
+  nitroHeld = false;
+  nitroOn = false;
+  nitroLock = false;
+  belialPhase = 'stop';
+  setPhase('stopping');
+  Sfx.brake();
+  brakeBtn.classList.add('active');
+  setTimeout(() => brakeBtn.classList.remove('active'), 280);
+}
+
+function startBelialBlast(){
+  if(!belialMode || belialPhase !== 'stop') return;
+  belialPhase = 'blast';
+  belialBlastT = 0;
+  belialFlameAcc = 0;
+  document.body.classList.add('belial-cine');
+  if(driveHint) driveHint.classList.add('dim');
+  if(belialFlames) belialFlames.reset();
+  Sfx.nitro();
+}
+
+function belialImpact(){
+  if(belialPhase !== 'blast') return;
+  belialPhase = 'knock';
+  belialKnockT = 0;
+  belialCarPose = null;
+  const aim = getBelialAim();
+  if(belialFlames){
+    belialFlames.spawnBurst(aim.x, 1.6, aim.z, PERF.tier === 'low' ? 55 : PERF.tier === 'medium' ? 100 : 170,
+      BELIAL_PALETTE, 13);
+  }
+  if(burst) burst.spawn(aim.x, 1.5, aim.z, IS_MOBILE ? 70 : 140,
+    [[1,.8,.4],[1,.4,.25],[.9,.12,.1],[1,1,1]], 12);
+  if(rings) rings.spawn(aim.x, .022, aim.z, .5, 16, 1.4, 0xff7a4a);
+  if(crashFlashEl){
+    crashFlashEl.classList.add('show');
+    setTimeout(() => crashFlashEl.classList.remove('show'), 180);
+  }
+  Sfx.crash();
+}
+
+function showBelialResult(){
+  if(belialPhase !== 'knock') return;
+  belialPhase = 'result';
+  belialResultT = 0;
+  belialWinner = '周佳乐';
+  winnerName = belialWinner;
+  winnerSlot = null;
+  vel = 0;
+  setPhase('reveal');
+  setBelialResultCopy(true);
+  resultName.textContent = belialWinner;
+  updateNitroUI(true);
+  Sfx.jialeReveal();
+  belialCarPose = { y: .82, rx: -Math.PI, ry: carHeading, rz: .22 };
+  clearTimeout(resultTimer);
+  resultTimer = setTimeout(() => {
+    if(belialPhase !== 'result') return;
+    resultDock.classList.add('show');
+    document.body.classList.add('result-open');
+  }, 220);
+}
+
+function startBelialZoom(){
+  if(!belialMode || belialPhase !== 'result') return;
+  belialPhase = 'zoom';
+  belialZoomT = 0;
+  hideResult();
+  const head = getBelialHeadWorld(belialTmpV1);
+  belialCam = {
+    fromP: camera.position.clone(),
+    fromL: new THREE.Vector3(camLook.x, camLook.y, camLook.z),
+    toP: new THREE.Vector3(head.x + 2.2, head.y + 1.6, head.z - 23),
+    toL: head.clone(),
+    fov0: camera.fov,
+    fov1: 44,
+    dur: BELIAL_ZOOM_DUR,
+    arc: 24
+  };
+}
+
+function startBelialTitle(){
+  if(!belialMode || belialPhase !== 'zoom') return;
+  belialPhase = 'title';
+  belialTitleT = 0;
+  buildBelialText();
+  Sfx.jialeSign();
+  if(!belialTextGroup){
+    belialFinalDockShown = true;
+    resultDock.classList.add('show');
+    document.body.classList.add('result-open');
+    return;
+  }
+  belialTextGroup.visible = true;
+  belialTextGroup.scale.setScalar(.02);
+  const wp = belialTextGroup.getWorldPosition(new THREE.Vector3());
+  const aspect = Math.max(.5, innerWidth / Math.max(1, innerHeight));
+  const fov = 44;
+  const perDist = 2 * Math.tan(fov * Math.PI / 360) * aspect;
+  const dist = clamp((belialTextWidth / .78) / Math.max(.001, perDist), 7, 60);
+  belialCam = {
+    fromP: camera.position.clone(),
+    fromL: new THREE.Vector3(camLook.x, camLook.y, camLook.z),
+    toP: new THREE.Vector3(wp.x, wp.y + .45, wp.z - dist),
+    toL: wp.clone(),
+    fov0: camera.fov,
+    fov1: fov,
+    dur: BELIAL_TITLE_DUR,
+    arc: 1.8
+  };
+}
+
+function setBelialResultCopy(on){
+  if(resultKickerEl) resultKickerEl.textContent = on ? 'BELIAL · 贝利亚审判' : RESULT_KICKER_DEFAULT;
+  if(resultSubEl) resultSubEl.textContent = on ? '火焰落定 · 本轮抽中' : RESULT_SUB_DEFAULT;
+}
+
+/* ---------- 世界坐标 ---------- */
+function getBelialHeadWorld(out){
+  if(!belialGroup) return out.set(0, BELIAL_TARGET_H * .9, carZ + BELIAL_DIST);
+  belialGroup.updateWorldMatrix(true, false);
+  return belialGroup.localToWorld(out.copy(belialHeadLocal || belialTmpV2.set(0, BELIAL_TARGET_H * .9, -BELIAL_TARGET_H * .03)));
+}
+
+function getBelialMouthWorld(out){
+  if(!belialGroup) return out.set(0, BELIAL_TARGET_H * .84, carZ + BELIAL_DIST);
+  belialGroup.updateWorldMatrix(true, false);
+  return belialGroup.localToWorld(out.copy(belialMouthLocal || belialTmpV2.set(0, BELIAL_TARGET_H * .84, -BELIAL_TARGET_H * .03)));
+}
+
+function getBelialAim(){
+  return belialAimV.set(carX, 1.15, carZ);
+}
+
+/* ---------- 每帧：比赛 / 车 / 相机 / 舞台 ---------- */
+function updateBelialRace(dt){
+  updateBelialStage(dt);
+
+  if(belialPhase === 'run'){
+    nitroOn = false;
+    nitroHeld = false;
+    vel = Math.min(BASE_MAX, vel + ACCEL * dt);
+    carZ += vel * dt;
+    updateCarPath(dt, true);
+    if(carZ > trackEnd + 30) loopTrack();
+    belialGroup.position.x = trackX(carZ + BELIAL_DIST);
+    belialGroup.position.z = carZ + BELIAL_DIST;
+    belialGroup.updateMatrixWorld(true);
+  }else if(belialPhase === 'stop'){
+    belialStopT += dt;
+    const u = clamp(belialStopT / belialStopDur, 0, 1);
+    carZ = belialStartZ + belialStopFrom * belialStopDur * (u - u * u * .5);
+    vel = belialStopFrom * (1 - u);
+    updateCarPath(dt, true);
+    if(u >= 1 || vel < .15){
+      vel = 0;
+      carZ = stopTargetZ;
+      startBelialBlast();
+    }
+  }else if(belialPhase === 'blast'){
+    belialBlastT += dt;
+    const mouth = getBelialMouthWorld(belialMouthWorldV);
+    const aim = getBelialAim();
+    const dir = belialDirV.copy(aim).sub(mouth);
+    const travel = dir.length();
+    if(travel > .01) dir.normalize();
+    const rate = PERF.tier === 'high' ? 420 : PERF.tier === 'medium' ? 260 : 150;
+    belialFlameAcc += rate * dt;
+    let n = Math.floor(belialFlameAcc);
+    belialFlameAcc -= n;
+    if(n > 16) n = 16;
+    if(belialFlames && n > 0){
+      belialFlames.spawnJet(mouth, dir, n, 300, .05, travel);
+    }
+    if(belialBlastT >= 1.08) belialImpact();
+  }else if(belialPhase === 'knock'){
+    belialKnockT += dt;
+    if(belialKnockT >= 1.65) showBelialResult();
+  }else if(belialPhase === 'result'){
+    belialResultT += dt;
+    if(belialResultT >= 1.9) startBelialZoom();
+  }else if(belialPhase === 'zoom'){
+    belialZoomT += dt;
+    if(belialZoomT >= BELIAL_ZOOM_DUR) startBelialTitle();
+  }else if(belialPhase === 'title'){
+    belialTitleT += dt;
+    updateBelialText(dt);
+    if(!belialFinalDockShown && belialTitleT > BELIAL_TITLE_DUR + 1.6){
+      belialFinalDockShown = true;
+      resultDock.classList.add('show');
+      document.body.classList.add('result-open');
+    }
+  }
+}
+
+function updateBelialStage(dt){
+  belialStageT += dt;
+  if(belialTierSeen !== PERF.tier) applyBelialPerfTier();
+  if(belialAura){
+    const base = PERF.tier === 'low' ? .20 : .34;
+    belialAura.material.opacity = base + .06 * Math.sin(belialStageT * 1.6);
+  }
+  if(belialRing && belialRing.visible){
+    belialRing.rotation.z += dt * .22;
+    belialRing.material.opacity = .13 + .05 * Math.sin(belialStageT * 2.1);
+  }
+  if(belialFlames) belialFlames.update(dt);
+  updateBelialBeam();
+}
+
+function applyBelialPerfTier(){
+  belialTierSeen = PERF.tier;
+  if(belialRing) belialRing.visible = PERF.tier !== 'low';
+  if(belialBeamCore) belialBeamCore.visible = PERF.tier !== 'low' && belialBeam && belialBeam.visible;
+  if(belialTextMesh && belialTextMesh.material){
+    belialTextMesh.material.wireframe = false;
+  }
+  if(belialModel){
+    const aniso = PERF.tier === 'high' ? 4 : 1;
+    belialModel.traverse((o) => {
+      if(o.material && o.material.map) o.material.map.anisotropy = aniso;
+    });
+  }
+}
+
+function updateBelialBeam(){
+  if(!belialBeam) return;
+  const active = belialPhase === 'blast' || (belialPhase === 'knock' && belialKnockT < .4);
+  if(!active){
+    belialBeam.visible = false;
+    if(belialBeamCore) belialBeamCore.visible = false;
+    return;
+  }
+  const mouth = getBelialMouthWorld(belialMouthWorldV);
+  const aim = getBelialAim();
+  const dir = belialDirV.copy(aim).sub(mouth);
+  const len = dir.length();
+  if(len < .01) return;
+  dir.normalize();
+  const beamLen = Math.max(8, len - Math.max(36, len * .16));
+  const mid = belialMidV.copy(mouth).addScaledVector(dir, beamLen * .5);
+  belialQuat.setFromUnitVectors(belialUpV, dir);
+  let op;
+  if(belialPhase === 'blast'){
+    op = .12 + .05 * Math.sin(belialBlastT * 38);
+  }else{
+    op = .12 * Math.max(0, 1 - belialKnockT / .4);
+  }
+  belialBeam.visible = true;
+  belialBeam.position.copy(mid);
+  belialBeam.quaternion.copy(belialQuat);
+  belialBeam.scale.set(1, beamLen, 1);
+  belialBeam.material.opacity = op;
+  if(belialBeamCore && PERF.tier !== 'low'){
+    belialBeamCore.visible = true;
+    belialBeamCore.position.copy(mid);
+    belialBeamCore.quaternion.copy(belialQuat);
+    belialBeamCore.scale.set(1, beamLen * .92, 1);
+    belialBeamCore.material.opacity = op * 1.9;
+  }else if(belialBeamCore){
+    belialBeamCore.visible = false;
+  }
+}
+
+function applyBelialCarPose(dt){
+  if(!carGroup || !belialMode) return;
+  if(belialPhase === 'knock'){
+    const p = clamp(belialKnockT / 1.65, 0, 1);
+    const air = clamp(p / .72, 0, 1);
+    const land = clamp((p - .72) / .28, 0, 1);
+    const y = Math.sin(air * Math.PI) * 5.2 + land * .82;
+    carGroup.position.x = carX + Math.sin(p * Math.PI * 2) * 1.8 * (1 - land);
+    carGroup.position.y = y;
+    carGroup.position.z = carZ + Math.sin(air * Math.PI) * 1.2;
+    carGroup.rotation.y = carHeading + Math.sin(p * Math.PI) * .85;
+    carGroup.rotation.x = -air * Math.PI * 2 - land * .04;
+    carGroup.rotation.z = Math.sin(p * Math.PI * 2.5) * .62 * (1 - land * .55) + land * .22;
+  }else if(belialCarPose){
+    carGroup.position.x = carX;
+    carGroup.position.z = carZ;
+    carGroup.position.y = belialCarPose.y + Math.sin(belialStageT * 3.1) * .012;
+    carGroup.rotation.y = belialCarPose.ry;
+    carGroup.rotation.x = belialCarPose.rx;
+    carGroup.rotation.z = belialCarPose.rz + Math.sin(belialStageT * 2.3) * .008;
+  }
+}
+
+function updateBelialCamera(dt){
+  if(!camera) return;
+  if(!belialCam){
+    if(belialPhase === 'zoom' || belialPhase === 'title') return;
+    let px, py, pz, tx, ty, tz, k, fov;
+    const sr = clamp(vel / BASE_MAX, 0, 1.4);
+    if(belialPhase === 'run' || belialPhase === 'stop'){
+      const stopP = belialPhase === 'stop' ? clamp(belialStopT / belialStopDur, 0, 1) : 0;
+      px = carX + lerp(4.8, 6.4, stopP);
+      py = 3.9 + sr * .35;
+      pz = carZ - 9.6 - sr * 1.4;
+      tx = carX * .45;
+      ty = 10.5 + sr * 2.0;
+      tz = carZ + 52;
+      k = 5.0; fov = 60 + sr * 4;
+    }else if(belialPhase === 'blast'){
+      px = carX + 8.2;
+      py = 3.4;
+      pz = carZ - 10.2;
+      tx = carX;
+      ty = 10.0;
+      tz = carZ + 50;
+      k = 6.5; fov = 56;
+    }else if(belialPhase === 'knock'){
+      const sh = (1 - clamp(belialKnockT / 1.65, 0, 1)) * .9;
+      px = carX + 9.5 + Math.sin(belialKnockT * 52) * .18 * sh;
+      py = 3.0 + Math.sin(belialKnockT * 41) * .12 * sh;
+      pz = carZ - 12.5;
+      tx = carX;
+      ty = 3.4;
+      tz = carZ + 3;
+      k = 7.5; fov = 54;
+    }else{
+      px = carX + 8.6;
+      py = 3.6;
+      pz = carZ - 11.0;
+      tx = carX;
+      ty = 8.0;
+      tz = carZ + 36;
+      k = 3.6; fov = 54;
+    }
+    if(!cameraReady){
+      camPos.x = px; camPos.y = py; camPos.z = pz;
+      camLook.x = tx; camLook.y = ty; camLook.z = tz;
+      cameraReady = true;
+    }else{
+      camPos.x = damp(camPos.x, px, k, dt);
+      camPos.y = damp(camPos.y, py, k, dt);
+      camPos.z = damp(camPos.z, pz, k, dt);
+      camLook.x = damp(camLook.x, tx, k * 1.12, dt);
+      camLook.y = damp(camLook.y, ty, k * 1.12, dt);
+      camLook.z = damp(camLook.z, tz, k * 1.12, dt);
+    }
+    camera.position.set(camPos.x, camPos.y, camPos.z);
+    if(!REDUCED){
+      const shake = belialPhase === 'blast' ? .05 : (belialPhase === 'knock' ? .07 : 0);
+      if(shake){
+        camera.position.x += Math.sin(idleT * 61) * shake;
+        camera.position.y += Math.sin(idleT * 47) * shake * .6;
+      }
+    }
+    camFov = damp(camFov, fov, 4.0, dt);
+    if(Math.abs(camera.fov - camFov) > .005){
+      camera.fov = camFov;
+      camera.updateProjectionMatrix();
+    }
+    camera.lookAt(camLook.x, camLook.y, camLook.z);
+    return;
+  }
+
+  if(!belialCam) return;
+  const t = belialPhase === 'zoom' ? belialZoomT : belialTitleT;
+  const u = easeInOutCubic(clamp(t / belialCam.dur, 0, 1));
+  const p = belialCam.fromP.clone().lerp(belialCam.toP, u);
+  const l = belialCam.fromL.clone().lerp(belialCam.toL, u);
+  p.y += Math.sin(u * Math.PI) * (belialCam.arc || 0);
+  if(belialPhase === 'title' && belialTitleT > belialCam.dur){
+    const extra = Math.min(1.2, (belialTitleT - belialCam.dur) * .18);
+    p.addScaledVector(belialTmpV1.copy(belialCam.toL).sub(belialCam.toP).normalize(), extra);
+  }
+  camera.position.copy(p);
+  camera.lookAt(l);
+  camPos.x = p.x; camPos.y = p.y; camPos.z = p.z;
+  camLook.x = l.x; camLook.y = l.y; camLook.z = l.z;
+  const f = lerp(belialCam.fov0, belialCam.fov1, u);
+  camFov = f;
+  camera.fov = f;
+  camera.updateProjectionMatrix();
+}
+
+function updateBelialAtmosphere(dt){
+  if(!belialMode || !scene) return;
+  /* updateJiale 每帧都会写回庆典雾色，这里在其后覆盖成贝利亚的暗紫雾。 */
+  if(scene.fog){
+    scene.fog.near = 140;
+    scene.fog.far = 900;
+    if(BELIAL_FOG) scene.fog.color.copy(BELIAL_FOG);
+  }
+  if(renderer) renderer.toneMappingExposure = 1.03;
+  if(sunLight){
+    if(BELIAL_SUN) sunLight.color.copy(BELIAL_SUN);
+    sunLight.intensity = 2.0;
+  }
+  if(hemiLight) hemiLight.intensity = .48;
+}
+
+/* ---------- 进入 / 退出 / 重开 ---------- */
+function enterBelial(){
+  if(!jialeMode || belialMode || !scene) return;
+  belialMode = true;
+  belialWinner = '';
+  /* 天桥横梁正好会挡在推镜路线上，贝利亚场景内暂时收起 */
+  belialHiddenScenery.forEach((o) => { o.visible = false; });
+  document.body.classList.add('belial-mode');
+  buildBelialStage();
+  resetBelialRound();
+  updateBelialEntry();
+  if(belialLoadState === 'idle' || belialLoadState === 'failed') loadBelialModel();
+  if(scene.fog){ scene.fog.near = 140; scene.fog.far = 900; }
+  fader.classList.add('show');
+  setTimeout(() => { if(belialMode) fader.classList.remove('show'); }, 240);
+  showJialeToast('贝利亚 · 点击赛车开火');
+}
+
+function exitBelial(){
+  if(!belialMode) return;
+  belialMode = false;
+  belialPhase = 'off';
+  belialHiddenScenery.forEach((o) => { o.visible = true; });
+  document.body.classList.remove('belial-mode', 'belial-cine', 'result-open');
+  disposeBelialStage();
+  hideResult();
+  setBelialResultCopy(false);
+  if(scene && scene.fog){ scene.fog.near = 80; scene.fog.far = 460; }
+  if(driveHint){
+    driveHint.textContent = '空格刹车 · 长按 SHIFT 氮气 · 碾过名字回充 N₂O';
+    driveHint.classList.add('dim');
+  }
+  setPhase('idle');
+  carZ = 0; vel = 0;
+  resetCarPose();
+  cameraReady = false;
+  camFov = 60;
+  if(camera){ camera.fov = 60; camera.updateProjectionMatrix(); }
+  fader.classList.add('show');
+  setTimeout(() => fader.classList.remove('show'), 220);
+  updateBelialEntry();
+  updateBelialStatus();
+  showJialeToast('已退出贝利亚');
+}
+
+function resetBelialRound(){
+  if(!belialMode) return;
+  removeBelialText();
+  if(belialFlames) belialFlames.reset();
+  if(belialBeam){ belialBeam.visible = false; belialBeam.material.opacity = 0; }
+  if(belialBeamCore){ belialBeamCore.visible = false; belialBeamCore.material.opacity = 0; }
+  belialPhase = 'run';
+  belialStopT = 0; belialBlastT = 0; belialKnockT = 0;
+  belialResultT = 0; belialZoomT = 0; belialTitleT = 0; belialStageT = 0;
+  belialFlameAcc = 0;
+  belialCarPose = null;
+  belialCam = null;
+  belialFinalDockShown = false;
+  belialWinner = '';
+  winnerName = '';
+  winnerSlot = null;
+  document.body.classList.remove('belial-cine', 'result-open');
+  resultDock.classList.remove('show');
+  hideResult();
+  setBelialResultCopy(false);
+  beginRound();
+  if(nameGroup) nameGroup.visible = false;
+  if(jialeGroupSafe()) jialeFanGroup.visible = false;
+  if(belialGroup){
+    belialGroup.visible = true;
+    belialGroup.position.set(trackX(carZ + BELIAL_DIST), 0, carZ + BELIAL_DIST);
+    belialGroup.updateMatrixWorld(true);
+  }
+  cameraReady = false;
+  camFov = 60;
+  if(camera){ camera.fov = 60; camera.updateProjectionMatrix(); }
+  if(driveHint){
+    driveHint.textContent = '点击赛车 · 让贝利亚开火';
+    driveHint.classList.remove('dim');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => driveHint.classList.add('dim'), 6000);
+  }
+}
+
+function jialeGroupSafe(){ return !!(jialeFanGroup && jialeFanGroup.parent); }
+
+/* ---------- 资源释放 ---------- */
+function disposeBelialObject(root){
+  if(!root) return;
+  root.traverse((o) => {
+    if(o.geometry) o.geometry.dispose();
+    if(!o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => {
+      if(!m) return;
+      const maps = ['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap','alphaMap'];
+      for(const key of maps){
+        const tex = m[key];
+        if(tex && tex !== glowTex && !nameTexCache.has(tex)) tex.dispose();
+      }
+      m.dispose();
+    });
+  });
+}
+
+function disposeBelialStage(){
+  belialLoadToken++;
+  removeBelialText();
+  if(belialFlames){ belialFlames.dispose(); belialFlames = null; }
+  if(belialBeam){
+    if(scene) scene.remove(belialBeam);
+    belialBeam.geometry.dispose();
+    belialBeam.material.dispose();
+    belialBeam = null;
+  }
+  if(belialBeamCore){
+    if(scene) scene.remove(belialBeamCore);
+    belialBeamCore.geometry.dispose();
+    belialBeamCore.material.dispose();
+    belialBeamCore = null;
+  }
+  if(belialGroup){
+    if(scene) scene.remove(belialGroup);
+    disposeBelialObject(belialGroup);
+    belialGroup = null;
+  }
+  if(belialPreloaded){
+    disposeBelialObject(belialPreloaded);
+    belialPreloaded = null;
+  }
+  belialModel = null;
+  belialAura = null;
+  belialRing = null;
+  belialHeadLocal = null;
+  belialMouthLocal = null;
+  belialTextLocal = null;
+  belialCam = null;
+  belialCarPose = null;
+  belialLoadState = 'idle';
+  belialLoadPercent = 0;
+  belialLoadError = '';
+  updateBelialStatus();
+  updateBelialEntry();
+}
+
+/* ---------- 点击赛车 ---------- */
+function onBelialPointer(e){
+  if(!belialMode || belialPhase !== 'run' || !renderer || !camera) return;
+  if(e.button !== undefined && e.button !== 0) return;
+  const t = e.target;
+  if(t && t.closest && t.closest('button, a, input, .result-dock, .start-panel, .hud-top, .speedo, .controls, .turn-btn, #jialeToast')) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  if(!rect.width || !rect.height) return;
+  const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  if(carGroup && ray.intersectObject(carGroup, true).length){
+    beginBelialStop();
+    return;
+  }
+  const p = belialTmpV1.set(carX, 1.0, carZ).project(camera);
+  if(p.z < 1){
+    const sx = (p.x * .5 + .5) * innerWidth;
+    const sy = (-p.y * .5 + .5) * innerHeight;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    const radius = Math.max(64, Math.min(170, innerHeight * .13));
+    if(dx * dx + dy * dy < radius * radius) beginBelialStop();
+  }
+}
+
+/* ---------- 调试辅助 ---------- */
+function debugBelialView(px, py, pz, tx, ty, tz, fov){
+  if(!belialMode || !camera) return { ok:false, reason: 'not in belial' };
+  belialPhase = 'zoom';
+  belialZoomT = -1e9;
+  belialCam = null;
+  camera.position.set(px, py, pz);
+  camera.lookAt(tx, ty, tz);
+  camPos.x = px; camPos.y = py; camPos.z = pz;
+  camLook.x = tx; camLook.y = ty; camLook.z = tz;
+  camFov = fov || 50;
+  camera.fov = camFov;
+  camera.updateProjectionMatrix();
+  cameraReady = true;
+  return { ok:true };
+}
+
+function debugBelialTitle(){
+  if(!jialeMode) return { ok: false, reason: 'jiale off' };
+  if(!belialMode) enterBelial();
+  if(!belialGroup) return { ok: false, reason: 'no stage' };
+  belialPhase = 'title';
+  belialTitleT = .3;
+  belialCam = null;
+  buildBelialText();
+  if(!belialTextGroup) return { ok: false, reason: 'no text' };
+  const wp = belialTextGroup.getWorldPosition(new THREE.Vector3());
+  const dist = 26;
+  camera.position.set(wp.x, wp.y + .8, wp.z - dist);
+  camera.lookAt(wp.x, wp.y, wp.z);
+  camPos.x = camera.position.x; camPos.y = camera.position.y; camPos.z = camera.position.z;
+  camLook.x = wp.x; camLook.y = wp.y; camLook.z = wp.z;
+  camFov = 44;
+  camera.fov = 44;
+  camera.updateProjectionMatrix();
+  cameraReady = true;
+  return { ok: true, w: +belialTextWidth.toFixed(2), pos: [wp.x, wp.y, wp.z] };
+}
+
+/* ---------- DOM 绑定 ---------- */
+belialEntryEl = $('belialBtn');
+belialStatusEl = $('belialStatus');
+belialStatusTextEl = $('belialStatusText');
+belialCreditEl = $('belialCredit');
+if(belialEntryEl){
+  belialEntryEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if(belialMode) exitBelial();
+    else enterBelial();
+  });
+}
+if(belialCreditEl){
+  belialCreditEl.addEventListener('click', (e) => e.stopPropagation());
+}
+addEventListener('pointerdown', onBelialPointer, { passive: true });
+updateBelialEntry();
 
 /* ============================================================
    路侧丰富度：弯道箭头 / 天桥 / 灯柱 / 猫眼 / 远景塔
@@ -3262,6 +4622,8 @@ function buildSkybridges(){
     }
     g.position.set(trackX(z), 0, z);
     g.rotation.y = trackAngle(z);
+    g.visible = !belialMode;
+    belialHiddenScenery.push(g);
     scene.add(g);
   });
 }
@@ -4835,7 +6197,7 @@ function beginRound(){
   winnerName = ''; winnerSlot = null;
   phaseT = 0; idleT = 0;
   resetJialeRound();
-  if(jialeMode) spawnJialeFans();
+  if(jialeMode && !belialMode) spawnJialeFans();
   Sfx.ignite();
   Sfx.begin();
   setPhase('running');
@@ -4862,6 +6224,7 @@ function setPhase(p){
 function requestBrake(){
   if(phase !== 'running') return;
   cancelTurnEvent(true);
+  if(belialMode){ beginBelialStop(); return; }
   if(jialeMode){
     const fan = pickJialeSignFan();
     if(!fan) return;
@@ -5182,6 +6545,7 @@ function updateCarPath(dt, follow){
 
 function updateRace(dt){
   phaseT += dt;
+  if(belialMode){ updateBelialRace(dt); return; }
   if(phase === 'running'){
     nitroOn = !!(nitroHeld && !nitroLock && nitro > .35);
     if(nitroOn && !nitroSfxPrev) Sfx.nitro();
@@ -5315,10 +6679,12 @@ function updateCar(dt){
     startLightMats.forEach((m,i)=>{ m.color.setHex(i===2 ? 0xff334c : 0x7a2331); });
     startLightGlows.forEach((g,i)=>{ g.material.opacity = i===2 ? .65 : .25; });
   }
+  if(belialMode) applyBelialCarPose(dt);
 }
 
 function updateCamera(dt){
   if(!camera) return;
+  if(belialMode){ updateBelialCamera(dt); return; }
   let px,py,pz,tx,ty,tz,k,fov;
   if(phase === 'idle'){
     const ang = -.62 + Math.sin(idleT*.24)*.36;
@@ -5912,6 +7278,11 @@ $('againBtn').addEventListener('click', ()=>{
   hideResult();
   fader.classList.add('show');
   setTimeout(()=>{
+    if(belialMode){
+      resetBelialRound();
+      fader.classList.remove('show');
+      return;
+    }
     cameraReady = false;
     camPos.x = 0; camPos.y = 3.15; camPos.z = -7.2;
     camLook.x = 0; camLook.y = 1.2; camLook.z = 15;
@@ -5981,6 +7352,7 @@ function dispose(){
   clearTimeout(perfEvalTimer);
   perfEvalTimer = null;
   PERF.evalActive = false;
+  disposeBelialStage();
   if(raf) cancelAnimationFrame(raf);
   raf = null;
   if(scene){
@@ -6163,6 +7535,33 @@ window.__raceDebug = {
       roadMarksVisible: roadMarkMeshes.filter(m=>m.visible).length,
       toast: jialeToastEl ? jialeToastEl.textContent : ''
     },
+    belial: {
+      on: belialMode,
+      phase: belialPhase,
+      load: belialLoadState,
+      pct: belialLoadPercent,
+      error: belialLoadError,
+      model: !!belialModel,
+      preloaded: !!belialPreloaded,
+      head: belialHeadLocal ? { y:+belialHeadLocal.y.toFixed(2), z:+belialHeadLocal.z.toFixed(2) } : null,
+      headWorld: belialGroup && belialHeadLocal ? (()=>{
+        const v = belialGroup.localToWorld(belialHeadLocal.clone());
+        return { x:+v.x.toFixed(2), y:+v.y.toFixed(2), z:+v.z.toFixed(2) };
+      })() : null,
+      height: +belialHeight.toFixed(2),
+      flames: belialFlames ? belialFlames.alive : 0,
+      text: !!belialTextGroup,
+      textWidth: +belialTextWidth.toFixed(2),
+      titleT: +belialTitleT.toFixed(2),
+      winner: belialWinner,
+      dock: resultDock.classList.contains('show')
+    },
+    cam: camera ? {
+      x: +camera.position.x.toFixed(2),
+      y: +camera.position.y.toFixed(2),
+      z: +camera.position.z.toFixed(2),
+      fov: +camera.fov.toFixed(1)
+    } : null,
     ground: winnerSlot ? (()=>{
       const p = winnerSlot.mesh.position.clone().project(camera);
       return { z:+winnerSlot.mesh.position.z.toFixed(2), x:+p.x.toFixed(2), y:+p.y.toFixed(2) };
@@ -6173,6 +7572,18 @@ window.__raceDebug = {
   jialeToggle: toggleJiale,
   jialeEnter: enterJiale,
   jialeExit: exitJiale,
+  belialEnter: enterBelial,
+  belialExit: exitBelial,
+  belialStop: beginBelialStop,
+  belialTitle: debugBelialTitle,
+  belialView: debugBelialView,
+  belialCarScreen: () => {
+    if(!camera) return null;
+    const p = new THREE.Vector3(carX, 1.0, carZ).project(camera);
+    return { x: (p.x * .5 + .5) * innerWidth, y: (-p.y * .5 + .5) * innerHeight };
+  },
+  belialSetModel: (url) => { belialModelUrls = [url]; belialLoadState = 'idle'; loadBelialModel(); },
+  belialYaw: (deg) => { if(belialModel) belialModel.rotation.y = deg * Math.PI / 180; },
   close: closePage
 };
 
