@@ -5891,6 +5891,9 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       closeDevTools();
       closePanel();
       try { if (window.__v8Guide && window.__v8Guide.replay) window.__v8Guide.replay(); } catch (err) {}
+    } else if (cmd === 'W1') {
+      closeDevTools();
+      try { window.open('https://github.com/Qicny233/RandomlyPick-LiquidGlass', '_blank', 'noopener'); } catch (err) {}
     }
     /* 未知指令：静默忽略 */
   }
