@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V7.8</title>
+<title>随机人员生成器 V8.0</title>
 <link rel="icon" href="data:,">
 <script>
 /* 版本渠道：尽早读取上次选择并跳转，避免页面先渲染再闪跳。
@@ -3518,6 +3518,433 @@ html[data-theme="dark"] #resetDefaultsToast {
   border-color: rgba(255, 255, 255, .12);
 }
 
+/* ==========================================================
+   v8.0 首次进入更新引导（全屏流光 · 两页）
+   仅首次展示一次；纯增量样式，不影响主界面
+   ========================================================== */
+#v8Guide {
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(158deg, #eef3fb 0%, #f7f1f5 46%, #edf4f1 100%);
+  transition: opacity .58s var(--ease-out);
+}
+#v8Guide[hidden] { display: none; }
+#v8Guide.show { opacity: 1; pointer-events: auto; }
+html[data-theme="dark"] #v8Guide {
+  background: linear-gradient(158deg, #080c15 0%, #0d1422 48%, #090f18 100%);
+}
+
+/* 全屏流光：两层柔和色团反向缓慢漂移 + 一道斜向扫光 */
+.vg-flow {
+  position: absolute;
+  inset: -26%;
+  pointer-events: none;
+  will-change: transform;
+  background:
+    radial-gradient(38% 34% at 20% 24%, rgba(242, 201, 218, .78), rgba(242, 201, 218, 0) 70%),
+    radial-gradient(35% 32% at 79% 20%, rgba(197, 228, 212, .74), rgba(197, 228, 212, 0) 70%),
+    radial-gradient(40% 36% at 17% 79%, rgba(214, 209, 246, .76), rgba(214, 209, 246, 0) 72%),
+    radial-gradient(42% 38% at 84% 81%, rgba(248, 231, 196, .72), rgba(248, 231, 196, 0) 72%);
+  animation: vgFlowA 26s ease-in-out infinite alternate;
+}
+.vg-flow.is-b {
+  background:
+    radial-gradient(32% 30% at 62% 16%, rgba(188, 214, 244, .5), rgba(188, 214, 244, 0) 70%),
+    radial-gradient(36% 34% at 30% 70%, rgba(255, 255, 255, .66), rgba(255, 255, 255, 0) 70%);
+  animation: vgFlowB 32s ease-in-out infinite alternate;
+}
+html[data-theme="dark"] .vg-flow {
+  background:
+    radial-gradient(40% 36% at 20% 24%, rgba(52, 78, 132, .55), rgba(52, 78, 132, 0) 70%),
+    radial-gradient(36% 34% at 79% 20%, rgba(38, 92, 92, .42), rgba(38, 92, 92, 0) 70%),
+    radial-gradient(42% 38% at 17% 79%, rgba(72, 56, 122, .5), rgba(72, 56, 122, 0) 72%),
+    radial-gradient(44% 40% at 84% 81%, rgba(110, 78, 46, .38), rgba(110, 78, 46, 0) 72%);
+}
+html[data-theme="dark"] .vg-flow.is-b {
+  background:
+    radial-gradient(34% 32% at 62% 16%, rgba(74, 112, 168, .42), rgba(74, 112, 168, 0) 70%),
+    radial-gradient(38% 36% at 30% 70%, rgba(58, 76, 110, .5), rgba(58, 76, 110, 0) 70%);
+}
+@keyframes vgFlowA {
+  from { transform: translate3d(-2%, -1.5%, 0) scale(1.03) rotate(-1deg); }
+  to   { transform: translate3d(2.2%, 1.6%, 0) scale(1.09) rotate(1deg); }
+}
+@keyframes vgFlowB {
+  from { transform: translate3d(2%, 1%, 0) scale(1.08) rotate(1.2deg); }
+  to   { transform: translate3d(-2.4%, -1.6%, 0) scale(1.02) rotate(-1.2deg); }
+}
+.vg-sheen {
+  position: absolute;
+  inset: -30% -20%;
+  pointer-events: none;
+  background: linear-gradient(102deg,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, .28) 50%,
+    rgba(255, 255, 255, 0) 60%);
+  animation: vgSheen 26s cubic-bezier(.4, .08, .3, .95) infinite;
+}
+html[data-theme="dark"] .vg-sheen {
+  background: linear-gradient(102deg,
+    rgba(150, 190, 255, 0) 40%,
+    rgba(150, 190, 255, .08) 50%,
+    rgba(150, 190, 255, 0) 60%);
+}
+@keyframes vgSheen {
+  0%        { transform: translate3d(-38%, 0, 0); }
+  55%, 100% { transform: translate3d(38%, 0, 0); }
+}
+#v8Guide::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(76% 64% at 50% 46%,
+    rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, .28) 100%);
+}
+html[data-theme="dark"] #v8Guide::after {
+  background: radial-gradient(76% 64% at 50% 46%,
+    rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, .34) 100%);
+}
+
+/* 玻璃卡片：两页共用同一高度，翻页时不会跳变 */
+.vg-card {
+  position: relative;
+  z-index: 3;
+  width: min(580px, 94vw);
+  max-height: min(88vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 30px;
+  --g-opacity: .72;
+  --g-blur: 26px;
+  opacity: 0;
+  transform: translateY(26px) scale(.965);
+  filter: blur(12px);
+  transition:
+    opacity .62s var(--ease-out),
+    transform .82s var(--ease-out),
+    filter .72s var(--ease-out);
+  will-change: transform, opacity, filter;
+}
+#v8Guide.show .vg-card { opacity: 1; transform: none; filter: none; }
+
+.vg-viewport {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+}
+.vg-page {
+  grid-area: 1 / 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  transform: translateX(30px);
+  filter: blur(8px);
+  pointer-events: none;
+  transition:
+    opacity .52s var(--ease-out),
+    transform .68s var(--ease-out),
+    filter .52s ease;
+}
+#v8Guide .vg-page.active { opacity: 1; transform: none; filter: none; pointer-events: auto; }
+#v8Guide .vg-page.leaving { opacity: 0; transform: translateX(-30px); filter: blur(8px); }
+
+/* 第一页：页面居中只有「更新成功」，文字带扫光 */
+.vg-p1 { align-items: center; justify-content: center; }
+.vg-hero {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 32px 72px;
+}
+.vg-hero::before {
+  content: '';
+  position: absolute;
+  width: min(440px, 74vw);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle,
+    rgba(143, 180, 232, .16) 0%, rgba(143, 180, 232, 0) 68%);
+  animation: vgGlow 8s ease-in-out infinite alternate;
+}
+@keyframes vgGlow {
+  from { opacity: .55; transform: scale(.94); }
+  to   { opacity: 1;   transform: scale(1.06); }
+}
+.vg-success {
+  position: relative;
+  font-size: clamp(44px, 8.6vw, 66px);
+  font-weight: 650;
+  letter-spacing: .16em;
+  padding-left: .16em;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: transparent;
+  background-image: linear-gradient(105deg,
+    #232b38 0%, #232b38 44%,
+    #9db8d6 48.5%, #e6eef8 50%, #9db8d6 51.5%,
+    #232b38 56%, #232b38 100%);
+  background-size: 260% 100%;
+  background-position: 130% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 10px 30px rgba(96, 140, 196, .13));
+  animation: vgSweep 7s cubic-bezier(.45, .05, .35, 1) 1.1s infinite;
+}
+html[data-theme="dark"] .vg-success {
+  background-image: linear-gradient(105deg,
+    #dfe7f3 0%, #dfe7f3 44%,
+    #a6c3e6 48.5%, #f4f9ff 50%, #a6c3e6 51.5%,
+    #dfe7f3 56%, #dfe7f3 100%);
+  filter: drop-shadow(0 10px 34px rgba(120, 170, 235, .18));
+}
+@keyframes vgSweep {
+  0%        { background-position: 130% 50%; }
+  55%, 100% { background-position: -30% 50%; }
+}
+
+/* 第二页：更新内容，条目由 JS 逐条渐显 */
+.vg-p2 .vg-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 34px 34px 92px;
+}
+.vg-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .24em;
+  color: var(--ink-3);
+}
+.vg-h {
+  margin-top: 7px;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  color: var(--ink-strong);
+}
+.vg-list {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+#v8Guide .vg-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 0;
+  opacity: 0;
+  transform: translateY(14px);
+  filter: blur(5px);
+  transition:
+    opacity .58s var(--ease-out),
+    transform .7s var(--ease-out),
+    filter .55s ease;
+}
+#v8Guide .vg-item.in { opacity: 1; transform: none; filter: none; }
+#v8Guide .vg-item + .vg-item { border-top: 1px solid rgba(25, 35, 55, .07); }
+html[data-theme="dark"] #v8Guide .vg-item + .vg-item { border-top-color: rgba(255, 255, 255, .08); }
+.vg-no {
+  flex: 0 0 auto;
+  width: 22px;
+  padding-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: #7fa6d8;
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme="dark"] .vg-no { color: #9dbfe8; }
+.vg-text {
+  font-size: 13.5px;
+  line-height: 1.68;
+  letter-spacing: .2px;
+  color: var(--ink-2);
+}
+
+/* 右下角按钮 */
+.vg-foot {
+  position: absolute;
+  right: 26px;
+  bottom: 22px;
+  display: flex;
+  justify-content: flex-end;
+}
+#v8Guide .vg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 10px 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .72);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .7));
+  color: var(--ink-strong);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .6px;
+  box-shadow:
+    0 1px 2px rgba(25, 35, 55, .06),
+    0 10px 26px rgba(25, 35, 55, .1),
+    inset 0 1px 0 rgba(255, 255, 255, .95);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  cursor: pointer;
+  transition:
+    transform .32s var(--spring-soft),
+    box-shadow .32s ease,
+    background .32s ease;
+}
+#v8Guide .vg-btn:hover {
+  transform: translateY(-1.5px);
+  box-shadow:
+    0 2px 4px rgba(25, 35, 55, .07),
+    0 14px 32px rgba(25, 35, 55, .14),
+    inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+#v8Guide .vg-btn:active { transform: scale(.97); transition-duration: .12s; }
+.vg-arrow {
+  font-size: 14px;
+  line-height: 1;
+  opacity: .55;
+  transition: transform .32s var(--spring-soft);
+}
+#v8Guide .vg-btn:hover .vg-arrow { transform: translateX(3px); }
+html[data-theme="dark"] #v8Guide .vg-btn {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .18), rgba(255, 255, 255, .08));
+  border-color: rgba(255, 255, 255, .16);
+  color: #eef3fb;
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, .3),
+    0 10px 26px rgba(0, 0, 0, .35),
+    inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+
+@media (max-width: 560px) {
+  #v8Guide { padding: 14px; }
+  .vg-card { width: 100%; max-height: 90vh; border-radius: 26px; }
+  .vg-hero { padding: 44px 22px 72px; }
+  .vg-success { letter-spacing: .12em; padding-left: .12em; }
+  .vg-p2 .vg-body { padding: 28px 22px 88px; }
+  .vg-foot { right: 18px; bottom: 18px; }
+  .vg-text { font-size: 13px; }
+}
+
+/* 兼容模式 / 减少动态效果：关掉持续流光，保留柔和的淡入 */
+html.lg-compat .vg-flow,
+html.lg-compat .vg-sheen,
+html.lg-compat .vg-hero::before,
+html.lg-compat .vg-success { animation: none; }
+html.lg-compat .vg-success { background-position: 130% 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .vg-flow, .vg-sheen, .vg-hero::before, .vg-success { animation: none !important; }
+  .vg-success { background-position: 130% 50%; }
+  #v8Guide, .vg-card, .vg-page, #v8Guide .vg-item, #v8Guide .vg-btn, .vg-arrow {
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ---------- 开发人员调试窗口（低调、无额外装饰） ---------- */
+#devToolsOverlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 260;
+}
+#devToolsDialog {
+  width: min(360px, 88vw);
+  padding: 20px 22px 18px;
+  opacity: 0;
+  transform: translateY(8px) scale(.97);
+  filter: blur(6px);
+  transition:
+    opacity .22s var(--ease-out),
+    transform .26s var(--spring-soft),
+    filter .26s var(--spring-soft);
+}
+#devToolsOverlay.show #devToolsDialog { opacity: 1; transform: none; filter: none; }
+.dev-tools-sub {
+  margin-top: -8px;
+  margin-bottom: 12px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  letter-spacing: .3px;
+  color: var(--ink-3);
+}
+#devCommandInput {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ink-strong);
+  border-radius: var(--mat-control-radius);
+  outline: none;
+  background: rgba(255, 255, 255, var(--mat-control-opacity));
+  border: 1px solid rgba(25, 35, 55, .05);
+  box-shadow: var(--mat-control-inset);
+  transition: border-color .2s, background .2s, box-shadow .2s;
+}
+#devCommandInput::placeholder { color: #a1a1aa; }
+#devCommandInput:focus {
+  border-color: #8fb4e8;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 0 0 3px rgba(158, 194, 240, .22),
+              inset 0 1px 2px rgba(25, 35, 55, .03);
+}
+html[data-theme="dark"] #devCommandInput {
+  background: rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 -1px 0 rgba(255, 255, 255, .05);
+}
+html[data-theme="dark"] #devCommandInput:focus {
+  background: rgba(255, 255, 255, .14);
+  border-color: rgba(143, 180, 232, .55);
+}
+#devCommandRun {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  letter-spacing: 1px;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: var(--mat-control-radius);
+  background: rgba(255, 255, 255, .55);
+  border: 1px solid rgba(25, 35, 55, .04);
+  box-shadow: 0 1px 2px rgba(25, 35, 55, .06);
+  transition: transform .2s var(--spring-soft), background .2s, box-shadow .2s;
+}
+#devCommandRun:hover { background: rgba(255, 255, 255, .8); }
+#devCommandRun:active {
+  transform: scale(.95);
+  box-shadow: 0 1px 2px rgba(25, 35, 55, .07),
+              inset 0 1px 2px rgba(25, 35, 55, .04);
+}
+html[data-theme="dark"] #devCommandRun {
+  background: rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .08);
+}
+html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .18); }
+
 /* ===== end fixes & options ===== */
 </style>
 <script>
@@ -3553,7 +3980,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
     <div class="ob-card glass mat-modal">
       <div class="ob-top">
-        <div class="ob-brand">随机人员生成器 <b>V7.8</b></div>
+        <div class="ob-brand">随机人员生成器 <b>V8.0</b></div>
         <div class="ob-dots" role="tablist" aria-label="引导页切换">
           <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
           <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
@@ -3935,7 +4362,7 @@ html[data-theme="dark"] #resetDefaultsToast {
   </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V7.8</div>
+    <div id="title">随机人员生成器 V8.0</div>
     <button id="complianceDot" type="button" aria-label="合规状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
   </div>
@@ -4134,6 +4561,11 @@ html[data-theme="dark"] #resetDefaultsToast {
             <span class="link-label">关于此程序</span>
             <span class="link-arrow">›</span>
           </div>
+
+          <div id="devToolsLink" class="setting-item setting-link">
+            <span class="link-label">开发人员调试窗口</span>
+            <span class="link-arrow">›</span>
+          </div>
         </div>
       </div>
 
@@ -4144,8 +4576,15 @@ html[data-theme="dark"] #resetDefaultsToast {
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V7.8
+      版本号：V8.0
       更新日志：
+      V8.0
+      · 新增 3D 赛车抽取模式，自带性能自适应降级，低端设备自动降特效保帧率
+      · 佳乐庆典升级为贝利亚奶龙专属版本
+      · 内置性能评估系统，自动适配设备
+      · 版本渠道切换（Beta / 正式版）、版本更新校验弹窗系统
+      · 可选开启帧率、CPU/GPU 监控面板
+      · 首次进入 V8.0 展示全屏更新引导（仅一次）
       V7.8
       · 3D 赛车新增自动性能适配：进入场景时静默检测设备能力与帧率，自动分为 High / Medium / Low 三档
       · 低端档自动关闭实时阴影、反射、光晕和多余粒子，降低模型面数与渲染分辨率，弱 WebGL 环境回退 WebGL1
@@ -4283,6 +4722,23 @@ html[data-theme="dark"] #resetDefaultsToast {
   </div>
 
   <!-- 版本渠道切换提示（切换即刷新页面） -->
+  <!-- 开发人员调试窗口（私有指令入口，无账号校验） -->
+  <div id="devToolsOverlay" class="scrim" role="dialog" aria-modal="true" aria-labelledby="devToolsTitle">
+    <div id="devToolsDialog" class="glass mat-modal">
+      <div class="drawer-header">
+        <span id="devToolsTitle">开发人员调试</span>
+        <button id="devToolsCloseBtn" class="sub-back-btn" type="button">×</button>
+      </div>
+      <div class="dev-tools-sub">输入调试指令后回车执行</div>
+      <div class="input-row dev-tools-row">
+        <div class="input-wrap">
+          <input type="text" id="devCommandInput" placeholder="调试指令" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
+        </div>
+        <button id="devCommandRun" type="button">执行</button>
+      </div>
+    </div>
+  </div>
+
   <div id="channelOverlay" class="scrim" role="dialog" aria-modal="true" aria-labelledby="channelDialogText">
     <div id="channelDialog" class="glass mat-modal">
       <div class="channel-dialog-kicker">版本渠道</div>
@@ -4307,11 +4763,46 @@ html[data-theme="dark"] #resetDefaultsToast {
     </div>
   </div>
 
+  <!-- v8.0 首次进入更新引导：全屏流光 · 两页（仅首次展示） -->
+  <div id="v8Guide" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="V8.0 更新内容">
+    <div class="vg-flow" aria-hidden="true"></div>
+    <div class="vg-flow is-b" aria-hidden="true"></div>
+    <div class="vg-sheen" aria-hidden="true"></div>
+    <div class="vg-card glass mat-modal">
+      <div class="vg-viewport">
+        <section class="vg-page vg-p1" data-vg-page="0">
+          <div class="vg-hero">
+            <div class="vg-success">更新成功</div>
+          </div>
+          <div class="vg-foot">
+            <button id="v8GuideNext" class="vg-btn" type="button">下一步<span class="vg-arrow" aria-hidden="true">→</span></button>
+          </div>
+        </section>
+        <section class="vg-page vg-p2" data-vg-page="1" inert aria-hidden="true">
+          <div class="vg-body">
+            <div class="vg-kicker">V8.0 · WHAT'S NEW</div>
+            <div class="vg-h">更新内容</div>
+            <ul class="vg-list">
+              <li class="vg-item"><span class="vg-no">01</span><span class="vg-text">新增 3D 赛车抽取模式，自带性能自适应降级，低端设备自动降特效保帧率</span></li>
+              <li class="vg-item"><span class="vg-no">02</span><span class="vg-text">佳乐庆典升级为贝利亚奶龙专属版本</span></li>
+              <li class="vg-item"><span class="vg-no">03</span><span class="vg-text">内置性能评估系统，自动适配设备</span></li>
+              <li class="vg-item"><span class="vg-no">04</span><span class="vg-text">版本渠道切换（Beta / 正式版）、版本更新校验弹窗系统</span></li>
+              <li class="vg-item"><span class="vg-no">05</span><span class="vg-text">可选开启帧率、CPU/GPU 监控面板</span></li>
+            </ul>
+          </div>
+          <div class="vg-foot">
+            <button id="v8GuideEnter" class="vg-btn" type="button">进入主界面<span class="vg-arrow" aria-hidden="true">→</span></button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <!-- 版本更新提示（仅提示，不强制刷新） -->
   <div id="updateOverlay" class="scrim">
     <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <div id="updateTitle" class="update-title">检测到新版本</div>
-      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V7.8</span></div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V8.0</span></div>
       <div id="updateLog" class="update-log"></div>
       <div class="confirm-btns">
         <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
@@ -4321,7 +4812,7 @@ html[data-theme="dark"] #resetDefaultsToast {
 
   <!-- 左下角常驻：版本 + 版权（不可关闭）；性能信息由设置项控制 -->
   <div id="appFooter" aria-hidden="true">
-    <span class="af-ver" id="footerVer">V 7.8</span>
+    <span class="af-ver" id="footerVer">V 8.0</span>
     <span class="af-sep">|</span>
     <span class="af-copy">Qicny © All Rights Reserved</span>
     <span id="perfInfo" hidden></span>
@@ -5354,6 +5845,76 @@ html[data-theme="dark"] #resetDefaultsToast {
   otherGroupBackBtn.addEventListener('click', function (e) {
     e.stopPropagation();
     otherGroupPage.classList.remove('open');
+  });
+
+  // ---------- 开发人员调试窗口（私有指令，无账号校验） ----------
+  var devToolsLink = document.getElementById('devToolsLink');
+  var devToolsOverlay = document.getElementById('devToolsOverlay');
+  var devToolsDialog = document.getElementById('devToolsDialog');
+  var devToolsCloseBtn = document.getElementById('devToolsCloseBtn');
+  var devCommandInput = document.getElementById('devCommandInput');
+  var devCommandRun = document.getElementById('devCommandRun');
+
+  function openDevTools() {
+    if (!devToolsOverlay) return;
+    devToolsOverlay.classList.add('show');
+    if (devCommandInput) {
+      devCommandInput.value = '';
+      setTimeout(function () {
+        try { devCommandInput.focus({ preventScroll: true }); } catch (err) { devCommandInput.focus(); }
+      }, 180);
+    }
+  }
+
+  function closeDevTools() {
+    if (!devToolsOverlay) return;
+    devToolsOverlay.classList.remove('show');
+    if (devCommandInput) devCommandInput.value = '';
+  }
+
+  function runDevCommand() {
+    if (!devCommandInput) return;
+    var cmd = String(devCommandInput.value || '').trim().toUpperCase();
+    devCommandInput.value = '';
+    if (cmd === 'W8') {
+      closeDevTools();
+      closePanel();
+      try { if (window.__v8Guide && window.__v8Guide.replay) window.__v8Guide.replay(); } catch (err) {}
+    }
+    /* 未知指令：静默忽略 */
+  }
+
+  if (devToolsLink) devToolsLink.addEventListener('click', function (e) {
+    e.stopPropagation();
+    openDevTools();
+  });
+  if (devToolsCloseBtn) devToolsCloseBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeDevTools();
+  });
+  if (devToolsOverlay) {
+    devToolsOverlay.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (e.target === devToolsOverlay) closeDevTools();
+    });
+    ['pointerdown', 'mousedown', 'touchstart'].forEach(function (type) {
+      devToolsOverlay.addEventListener(type, function (e) { e.stopPropagation(); }, false);
+    });
+  }
+  if (devToolsDialog) devToolsDialog.addEventListener('click', function (e) { e.stopPropagation(); });
+  if (devCommandRun) devCommandRun.addEventListener('click', function (e) {
+    e.stopPropagation();
+    runDevCommand();
+  });
+  if (devCommandInput) devCommandInput.addEventListener('keydown', function (e) {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runDevCommand();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeDevTools();
+    }
   });
 
   // ---------- 三级界面：关于此程序 ----------
@@ -8838,8 +9399,8 @@ html[data-theme="dark"] #resetDefaultsToast {
    ========================================================== */
 (function () {
   'use strict';
-  var APP_VERSION = '7.8';  // 本地版本（与仓库根目录 version.json 对比）
-  var DISPLAY_VERSION = 'V7.8';
+  var APP_VERSION = '8.0';  // 本地版本（与仓库根目录 version.json 对比）
+  var DISPLAY_VERSION = 'V8.0';
   var PERF_KEY = 'lottery_perf_v1';
 
   function $(id) { return document.getElementById(id); }
@@ -9444,6 +10005,174 @@ html[data-theme="dark"] #resetDefaultsToast {
   });
 
   sync();
+})();
+</script>
+<script>
+/* ==========================================================
+   v8.0 首次进入更新引导
+   仅首次展示一次；标记按版本独立（v8_0），未来版本各用各的 key
+   ========================================================== */
+(function () {
+  'use strict';
+  var GUIDE_KEY = 'rplg_update_guide_v8_0_seen';
+  var root = document.getElementById('v8Guide');
+  if (!root) return;
+  var pages = Array.prototype.slice.call(root.querySelectorAll('.vg-page'));
+  var items = Array.prototype.slice.call(root.querySelectorAll('.vg-item'));
+  var nextBtn = document.getElementById('v8GuideNext');
+  var enterBtn = document.getElementById('v8GuideEnter');
+  var pageIdx = 0;
+  var opened = false;
+  var itemTimers = [];
+
+  function markSeen() {
+    try { localStorage.setItem(GUIDE_KEY, '1'); } catch (e) {}
+  }
+
+  function clearItemTimers() {
+    for (var i = 0; i < itemTimers.length; i++) clearTimeout(itemTimers[i]);
+    itemTimers = [];
+  }
+
+  /* 逐条渐显：间隔 240ms，一条落定前一条已开始，不会整片同时出现 */
+  function revealItems() {
+    clearItemTimers();
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('in');
+    for (var j = 0; j < items.length; j++) {
+      (function (n) {
+        itemTimers.push(setTimeout(function () {
+          if (pageIdx === 1) items[n].classList.add('in');
+        }, 260 + n * 240));
+      })(j);
+    }
+  }
+
+  function showPage(n) {
+    if (n === pageIdx || !pages[n]) return;
+    var prev = pages[pageIdx];
+    pageIdx = n;
+    if (prev) {
+      prev.classList.remove('active');
+      prev.classList.add('leaving');
+      prev.setAttribute('inert', '');
+      prev.setAttribute('aria-hidden', 'true');
+    }
+    var next = pages[n];
+    next.classList.remove('leaving');
+    next.removeAttribute('inert');
+    next.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        next.classList.add('active');
+        if (n === 1) revealItems();
+      });
+    });
+  }
+
+  function resetGuide() {
+    clearItemTimers();
+    pageIdx = 0;
+    for (var i = 0; i < pages.length; i++) {
+      var p = pages[i];
+      p.classList.remove('active', 'leaving');
+      p.setAttribute('aria-hidden', 'true');
+      if (i === 0) p.removeAttribute('inert');
+      else p.setAttribute('inert', '');
+    }
+    for (var j = 0; j < items.length; j++) items[j].classList.remove('in');
+  }
+
+  function openGuide() {
+    if (opened) return;
+    opened = true;
+    markSeen();                 // 展示即记录：中途刷新也不会重复弹出
+    root.hidden = false;
+    root.setAttribute('aria-hidden', 'false');
+    if (pages[0]) {
+      pages[0].removeAttribute('inert');
+      pages[0].setAttribute('aria-hidden', 'false');
+    }
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        root.classList.add('show');
+        if (pages[0]) pages[0].classList.add('active');
+      });
+    });
+  }
+
+  /* 调试指令 W8：清除已看标记并原样重播（重播结束会重新标记为已看） */
+  function replayGuide() {
+    try { localStorage.removeItem(GUIDE_KEY); } catch (e) {}
+    clearItemTimers();
+    opened = false;
+    root.classList.remove('show');
+    root.hidden = true;
+    root.setAttribute('aria-hidden', 'true');
+    resetGuide();
+    requestAnimationFrame(function () {
+      requestAnimationFrame(openGuide);
+    });
+  }
+
+  window.__v8Guide = { replay: replayGuide, key: GUIDE_KEY };
+
+  function closeGuide() {
+    if (!opened) return;
+    opened = false;
+    clearItemTimers();
+    root.classList.remove('show');
+    setTimeout(function () {
+      root.hidden = true;
+      root.setAttribute('aria-hidden', 'true');
+    }, 640);
+  }
+
+  if (nextBtn) nextBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    showPage(1);
+  });
+  if (enterBtn) enterBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeGuide();
+  });
+
+  /* 遮罩内的事件不穿透到主界面（点击屏幕开始/停止等） */
+  ['click', 'pointerdown', 'mousedown', 'touchstart', 'keydown', 'keyup'].forEach(function (type) {
+    root.addEventListener(type, function (e) { e.stopPropagation(); }, false);
+  });
+  root.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') e.preventDefault();
+  });
+
+  var seen = false;
+  try { seen = localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { seen = true; }
+  if (seen) return;
+
+  var ob = document.getElementById('onboarding');
+  if (!ob || getComputedStyle(ob).display === 'none') {
+    setTimeout(openGuide, 700);
+    return;
+  }
+
+  /* 新手引导正在展示：等它彻底退场后再出现，避免两层遮罩叠加 */
+  var pending = false;
+  var mo = new MutationObserver(function () {
+    if (pending) return;
+    if (getComputedStyle(ob).display === 'none') {
+      pending = true;
+      mo.disconnect();
+      setTimeout(openGuide, 620);
+    }
+  });
+  mo.observe(ob, { attributes: true, attributeFilter: ['style', 'class'] });
+  /* 兜底检查：极少数情况下没有再触发属性变化 */
+  setTimeout(function () {
+    if (!pending && getComputedStyle(ob).display === 'none') {
+      pending = true;
+      try { mo.disconnect(); } catch (e) {}
+      setTimeout(openGuide, 620);
+    }
+  }, 40000);
 })();
 </script>
 </body>

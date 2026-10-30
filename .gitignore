@@ -3,7 +3,9 @@
 _lx_*.js
 _lx_*.png
 _perf_tmp.js
-_serve.js
+
+# 本地开发工具（贝利亚源码同步 / 静态服务器 / 验证截图）
+/dev/
 
 # 本地备份与历史副本
 backup.html
