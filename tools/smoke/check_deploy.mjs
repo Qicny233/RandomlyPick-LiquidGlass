@@ -52,14 +52,15 @@ await check('正式版首页可访问且含渠道设置', async () => {
   assert(r.status === 200, 'status=' + r.status);
   assert(r.text.includes('随机人员生成器'), 'missing app title');
   assert(r.text.includes('id="channelOpts"'), 'missing channel switcher');
-  assert(!r.text.includes('id="raceFrame"'), 'release unexpectedly contains race UI');
+  /* v8.0 起 3D 赛车进入正式版，正式版也带隐藏赛车入口 */
+  assert(r.text.includes('id="raceFrame"'), 'missing race UI');
 });
 
 await check('正式版 version.json 可读取', async () => {
   const r = await getText('version.json');
   assert(r.status === 200, 'status=' + r.status);
   const v = JSON.parse(r.text);
-  assert(typeof v.version === 'string' && /^\d+\.\d+\.\d+/.test(v.version), 'bad version=' + v.version);
+  assert(typeof v.version === 'string' && /^\d+\.\d+(\.\d+)?/.test(v.version), 'bad version=' + v.version);
   console.log('      release = ' + v.version);
 });
 
@@ -76,7 +77,7 @@ if (EXPECT_BETA) {
     const r = await getText('beta/version.json');
     assert(r.status === 200, 'status=' + r.status);
     const v = JSON.parse(r.text);
-    assert(typeof v.version === 'string' && /^\d+\.\d+\.\d+/.test(v.version), 'bad version=' + v.version);
+    assert(typeof v.version === 'string' && /^\d+\.\d+(\.\d+)?/.test(v.version), 'bad version=' + v.version);
     console.log('      beta    = ' + v.version);
   });
   
@@ -89,8 +90,10 @@ if (EXPECT_BETA) {
   console.log('SKIP  Beta 检查（本次部署未包含 Beta）');
 }
 
-await check('正式版根目录不含赛车页（两版互不污染）', async () => {
-  assert(await head('race.html') === 404, 'root race.html should be 404');
+await check('正式版赛车资源齐全', async () => {
+  assert(await head('race.html') === 200, 'root race.html missing');
+  assert(await head('three.global.min.js') === 200, 'root three.global.min.js missing');
+  assert(await head('assets/nailong/nailong.glb') === 200, 'root Nailong model missing');
 });
 
 if (failures.length) {
