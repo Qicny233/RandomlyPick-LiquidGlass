@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V8.0</title>
+<title>随机人员生成器 V8.1</title>
 <link rel="icon" href="data:,">
 <script>
 /* 全局日志 / 异常分级 / 短暂提示。尽早加载，后续所有模块统一写入。 */
@@ -587,8 +587,9 @@ body.jiale-bg {
 #complianceDot.pass { background: #4f9e75; }
 #complianceDot.fail { background: #c96f63; }
 
-/* 指示灯展开后的文字按钮 */
-#complianceBtn {
+/* 指示灯展开后的两个胶囊按钮 */
+#complianceBtn,
+#auditPanelBtn {
   max-width: 0;
   padding: 8px 0;
   border-width: 0;
@@ -596,18 +597,23 @@ body.jiale-bg {
   overflow: hidden;
   white-space: nowrap;
   pointer-events: none;
-  transition: max-width .35s var(--ease-out),
+  transition: max-width .38s var(--ease-out),
               opacity .3s ease,
-              padding .35s var(--ease-out);
+              padding .38s var(--ease-out);
 }
 
-#titleArea.expanded #complianceBtn {
-  max-width: 190px;
+#auditPanelBtn { transition-delay: .045s; }
+
+#titleArea.expanded #complianceBtn,
+#titleArea.expanded #auditPanelBtn {
+  max-width: 180px;
   padding: 8px 16px;
   border-width: 1px;
   opacity: 1;
   pointer-events: auto;
 }
+
+#titleArea:not(.expanded) #auditPanelBtn { transition-delay: 0s; }
 
 /* 概率验真状态：绿=正常，橙=参数异常/配置被改，红=校验故障 */
 #complianceDot.warn { background: #d99a3d; }
@@ -647,93 +653,6 @@ body.jiale-bg {
 html[data-theme="dark"] .audit-tip {
   color: var(--ink-2);
   background: rgba(34, 40, 52, .82);
-  border-color: rgba(255, 255, 255, .08);
-}
-
-/* 简易哈希悬浮卡片 */
-#hashCard {
-  position: fixed;
-  top: 66px;
-  left: 24px;
-  width: min(322px, calc(100vw - 48px));
-  padding: 16px 18px 14px;
-  z-index: 45;
-  opacity: 0;
-  transform: translateY(-6px) scale(.98);
-  pointer-events: none;
-  filter: blur(4px);
-  transition: opacity .22s var(--ease-out), transform .26s var(--spring-soft), filter .26s var(--spring-soft);
-}
-#hashCard.show { opacity: 1; transform: none; filter: none; pointer-events: auto; }
-.hash-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.hash-card-title {
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: .6px;
-  color: var(--ink);
-}
-.hash-card-state {
-  font-size: 10.5px;
-  letter-spacing: .4px;
-  color: var(--ink-3);
-}
-.hash-card-state.ok { color: #4f9e75; }
-.hash-card-state.warn { color: #b97d24; }
-.hash-card-state.fatal { color: #b4564b; }
-#hashCardCode {
-  display: block;
-  padding: 9px 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  line-height: 1.55;
-  letter-spacing: .2px;
-  color: var(--ink-strong);
-  word-break: break-all;
-  background: rgba(255, 255, 255, var(--mat-control-opacity));
-  border: 1px solid rgba(25, 35, 55, .05);
-  border-radius: var(--mat-control-radius);
-  box-shadow: var(--mat-control-inset);
-}
-html[data-theme="dark"] #hashCardCode {
-  background: rgba(255, 255, 255, .08);
-  border-color: rgba(255, 255, 255, .07);
-}
-.hash-card-note {
-  margin: 8px 0 10px;
-  font-size: 10.5px;
-  line-height: 1.55;
-  color: var(--ink-3);
-}
-.hash-card-actions { display: flex; gap: 8px; }
-.hash-card-actions button,
-.audit-actions button,
-.audit-params-toggle {
-  flex: 1;
-  padding: 7px 8px;
-  font-family: inherit;
-  font-size: 11.5px;
-  letter-spacing: .3px;
-  color: var(--ink);
-  cursor: pointer;
-  border-radius: var(--mat-control-radius);
-  background: rgba(255, 255, 255, var(--mat-control-opacity));
-  border: 1px solid rgba(25, 35, 55, .06);
-  box-shadow: var(--mat-control-inset);
-  transition: transform .2s var(--spring-soft), background .2s;
-}
-.hash-card-actions button:active,
-.audit-actions button:active,
-.audit-params-toggle:active { transform: scale(.98); }
-html[data-theme="dark"] .hash-card-actions button,
-html[data-theme="dark"] .audit-actions button,
-html[data-theme="dark"] .audit-params-toggle {
-  background: rgba(255, 255, 255, .1);
   border-color: rgba(255, 255, 255, .08);
 }
 
@@ -794,6 +713,28 @@ html[data-theme="dark"] #auditHash {
   border-color: rgba(255, 255, 255, .07);
 }
 .audit-actions { display: flex; gap: 8px; margin-top: 10px; }
+.audit-actions button,
+.audit-params-toggle {
+  flex: 1;
+  padding: 7px 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: .3px;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: var(--mat-control-radius);
+  background: rgba(255, 255, 255, var(--mat-control-opacity));
+  border: 1px solid rgba(25, 35, 55, .06);
+  box-shadow: var(--mat-control-inset);
+  transition: transform .2s var(--spring-soft), background .2s;
+}
+.audit-actions button:active,
+.audit-params-toggle:active { transform: scale(.98); }
+html[data-theme="dark"] .audit-actions button,
+html[data-theme="dark"] .audit-params-toggle {
+  background: rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .08);
+}
 .audit-note {
   margin: 12px 0;
   font-size: 11px;
@@ -4428,7 +4369,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
     <div class="ob-card glass mat-modal">
       <div class="ob-top">
-        <div class="ob-brand">随机人员生成器 <b>V8.0</b></div>
+        <div class="ob-brand">随机人员生成器 <b>V8.1</b></div>
         <div class="ob-dots" role="tablist" aria-label="引导页切换">
           <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
           <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
@@ -4810,22 +4751,11 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V8.0</div>
+    <div id="title">随机人员生成器 V8.1</div>
     <button id="complianceDot" type="button" aria-label="概率验真状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
+    <button id="auditPanelBtn" class="top-btn" type="button">哈希审计面板</button>
     <div id="auditTip" class="audit-tip" hidden>校验当前概率配置，哈希变化即代表配置被修改</div>
-  </div>
-  <div id="hashCard" class="glass mat-floating" role="dialog" aria-label="概率配置哈希" aria-hidden="true">
-    <div class="hash-card-head">
-      <span class="hash-card-title">概率配置指纹</span>
-      <span id="hashCardState" class="hash-card-state">校验正常</span>
-    </div>
-    <code id="hashCardCode">—</code>
-    <div class="hash-card-note">该哈希由当前概率参数算出，哈希变化即代表运行中的配置被修改。</div>
-    <div class="hash-card-actions">
-      <button id="hashCardCopy" type="button">复制哈希</button>
-      <button id="hashCardOpen" type="button">展开审计面板</button>
-    </div>
   </div>
   <div class="top-actions">
     <div class="pick-wrap" id="pickWrap">
@@ -5037,8 +4967,13 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V8.0
+      版本号：V8.1
       更新日志：
+      V8.1
+      · 新增本地合规审计验真：实时计算概率参数 SHA-256 哈希，哈希变化即代表配置被修改
+      · 概率验真指示灯升级：绿=正常、橙=参数异常、红=校验故障；单击展开合规校验与审计面板入口
+      · 审计面板支持明文参数、哈希一键复制；调试窗口新增「审计记录」分组
+      · 全局异常分级处理：严重错误提示并回退上次可用配置，轻度警告仅写日志
       V8.0
       · 新增 3D 赛车抽取模式，自带性能自适应降级，低端设备自动降特效保帧率
       · 佳乐庆典升级为贝利亚奶龙专属版本
@@ -5293,7 +5228,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   <div id="updateOverlay" class="scrim">
     <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <div id="updateTitle" class="update-title">检测到新版本</div>
-      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V8.0</span></div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V8.1</span></div>
       <div id="updateLog" class="update-log"></div>
       <div class="confirm-btns">
         <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
@@ -5303,7 +5238,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
 
   <!-- 左下角常驻：版本 + 版权（不可关闭）；性能信息由设置项控制 -->
   <div id="appFooter" aria-hidden="true">
-    <span class="af-ver" id="footerVer">V 8.0</span>
+    <span class="af-ver" id="footerVer">V 8.1</span>
     <span class="af-sep">|</span>
     <span class="af-copy">Qicny © All Rights Reserved</span>
     <span id="perfInfo" hidden></span>
@@ -6710,19 +6645,15 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     complianceOverlay.classList.remove('show');
   }
 
-  // 指示灯：首次点击展开合规状态，再次点击弹出哈希卡片
+  // 指示灯：点击一次向右展开两个胶囊，再次点击收起
   var complianceExpanded = false;
 
   complianceDot.addEventListener('click', function (e) {
     e.stopPropagation();
     if (auditTip) { auditTip.hidden = true; markAuditTipSeen(); }
     closeTopControls('compliance'); // 互斥：先收起其他展开项
-    if (!complianceExpanded) {
-      complianceExpanded = true;
-      titleArea.classList.add('expanded');
-    } else {
-      toggleHashCard();
-    }
+    complianceExpanded = !complianceExpanded;
+    titleArea.classList.toggle('expanded', complianceExpanded);
   });
 
   complianceBtn.addEventListener('click', function (e) {
@@ -6730,14 +6661,17 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     openComplianceDialog();
   });
 
-  // 点击页面其他位置收起指示灯与哈希卡片
-  document.addEventListener('click', function (e) {
+  var auditPanelBtn = document.getElementById('auditPanelBtn');
+  if (auditPanelBtn) auditPanelBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    openAuditPanel();
+  });
+
+  // 点击页面其他位置收起指示灯胶囊
+  document.addEventListener('click', function () {
     if (complianceExpanded) {
       complianceExpanded = false;
       titleArea.classList.remove('expanded');
-    }
-    if (hashCard && hashCard.classList.contains('show') && !hashCard.contains(e.target)) {
-      closeHashCard();
     }
   });
 
@@ -6777,11 +6711,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   var auditRecovering = false;
 
   var auditTip = document.getElementById('auditTip');
-  var hashCard = document.getElementById('hashCard');
-  var hashCardState = document.getElementById('hashCardState');
-  var hashCardCode = document.getElementById('hashCardCode');
-  var hashCardCopy = document.getElementById('hashCardCopy');
-  var hashCardOpen = document.getElementById('hashCardOpen');
   var auditOverlay = document.getElementById('auditOverlay');
   var auditDialog = document.getElementById('auditDialog');
   var auditCloseBtn = document.getElementById('auditCloseBtn');
@@ -6855,20 +6784,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     return out;
   }
 
-  function readStarMode() {
-    try { return localStorage.getItem('lg_star_mode_v1') === 'ind' ? 'ind' : 'once'; }
-    catch (e) { __lgLog.warn('读取流星模式失败', e); return 'once'; }
-  }
-
-  function readViewMode() {
-    try {
-      var v = localStorage.getItem('lg_hscroll_v1');
-      return (v === 'h' || v === 'meteor') ? v : 'classic';
-    } catch (e) { __lgLog.warn('读取滚动模式失败', e); return 'classic'; }
-  }
-
   function buildAuditConfig() {
-    var lg8El = document.getElementById('lg8Toggle');
     return {
       schema: 'rplg-prob-audit/1',
       weights: weights.map(function (w) { return (typeof w === 'number' && isFinite(w)) ? w : String(w); }),
@@ -6876,10 +6792,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       jiale: !!jialeMode,
       jialeHold: !!jialeHold,
       count: pickCount,
-      mode: pickMode,
-      lg8: !!(lg8El && lg8El.checked),
-      star: readStarMode(),
-      view: readViewMode()
+      mode: pickMode
     };
   }
 
@@ -6900,9 +6813,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     if (typeof cfg.jiale !== 'boolean' || typeof cfg.jialeHold !== 'boolean') issues.push('庆典开关格式非法');
     if (!(cfg.count >= 1 && cfg.count <= 4 && Math.floor(cfg.count) === cfg.count)) issues.push('抽取人数越界');
     if (cfg.mode !== 'one' && cfg.mode !== 'all') issues.push('抽取方式非法');
-    if (typeof cfg.lg8 !== 'boolean') issues.push('八人组开关格式非法');
-    if (cfg.star !== 'once' && cfg.star !== 'ind') issues.push('流星模式取值非法');
-    if (cfg.view !== 'classic' && cfg.view !== 'h' && cfg.view !== 'meteor') issues.push('滚动模式取值非法');
     return issues;
   }
 
@@ -6951,10 +6861,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       jiale: cfg.jiale,
       jialeHold: cfg.jialeHold,
       count: cfg.count,
-      mode: cfg.mode,
-      lg8: cfg.lg8,
-      star: cfg.star,
-      view: cfg.view
+      mode: cfg.mode
     };
   }
 
@@ -6985,9 +6892,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     row('庆典常驻', cfg.jialeHold ? '开启' : '关闭', false);
     row('抽取人数', cfg.count, false);
     row('抽取方式', cfg.mode === 'all' ? '单次抽取' : '逐个抽取', false);
-    row('八人组', cfg.lg8 ? '开启' : '关闭', false);
-    row('流星模式', cfg.star === 'ind' ? '独立流星' : '单次流星', false);
-    row('滚动模式', cfg.view === 'h' ? '横向滚动' : (cfg.view === 'meteor' ? '流星' : '经典'), false);
     section('权重明文（' + cfg.weights.length + ' 项）');
     for (var i = 0; i < cfg.weights.length; i++) {
       row('#' + (i + 1) + ' ' + (NAMES[i] ? NAMES[i].name : ''), cfg.weights[i], Number(cfg.weights[i]) !== 1);
@@ -7008,11 +6912,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       complianceDot.setAttribute('aria-label', '概率验真状态：' + status);
       complianceDot.title = '概率验真：' + status;
     }
-    if (hashCardState) {
-      hashCardState.className = 'hash-card-state ' + auditState;
-      hashCardState.textContent = status;
-    }
-    if (hashCardCode) hashCardCode.textContent = auditHash || '—';
     if (auditStatusEl) {
       auditStatusEl.className = 'audit-status ' + auditState;
       auditStatusEl.textContent = status;
@@ -7037,7 +6936,10 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       if (result.state !== 'fatal' && result.issues.length === 0) {
         lastGoodAudit = { cfg: cloneAuditConfig(result.cfg), hash: result.hash };
       }
-      __lgLog.audit(trigger, oldHash, auditHash, auditStatusText());
+      /* 只记录概率参数真正发生变化的事件，打开面板/手动刷新不写审计 */
+      if (oldHash !== auditHash) {
+        __lgLog.audit(trigger, oldHash, auditHash, auditStatusText());
+      }
       renderAudit();
     } catch (err) {
       auditState = 'fatal';
@@ -7090,26 +6992,8 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     setTimeout(function () { if (auditTip) auditTip.hidden = true; }, 9000);
   }
 
-  function openHashCard() {
-    if (!hashCard) return;
-    refreshAudit('打开哈希卡片');
-    hashCard.classList.add('show');
-    hashCard.setAttribute('aria-hidden', 'false');
-  }
-  function closeHashCard() {
-    if (!hashCard) return;
-    hashCard.classList.remove('show');
-    hashCard.setAttribute('aria-hidden', 'true');
-  }
-  function toggleHashCard() {
-    if (!hashCard) return;
-    if (hashCard.classList.contains('show')) closeHashCard();
-    else openHashCard();
-  }
-
   function openAuditPanel() {
     if (!auditOverlay) return;
-    closeHashCard();
     refreshAudit('打开审计面板', true);
     if (auditParamsEl) auditParamsEl.hidden = true;
     if (auditParamsToggle) {
@@ -7175,17 +7059,9 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       Array.prototype.forEach.call(modeOpts.children, function (b) {
         b.classList.toggle('active', b.getAttribute('data-mode') === pickMode);
       });
-      var lg8El = document.getElementById('lg8Toggle');
-      if (lg8El && lg8El.checked !== cfg.lg8) {
-        lg8El.checked = cfg.lg8;
-        try { localStorage.setItem('lg_8mode_v1', cfg.lg8 ? '1' : '0'); }
-        catch (e) { __lgLog.warn('恢复八人组开关失败', e); }
-      }
       buildProbPool();
       saveWeights();
       refreshCompliance('异常恢复');
-      try { window.dispatchEvent(new CustomEvent('lg-star', { detail: cfg.star })); }
-      catch (e2) { __lgLog.warn('恢复流星模式失败', e2); }
       __lgLog.note('audit', '已恢复上次可用配置', reason ? String(reason) : '');
       return true;
     } catch (err) {
@@ -7196,9 +7072,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     }
   }
 
-  if (hashCard) hashCard.addEventListener('click', function (e) { e.stopPropagation(); });
-  if (hashCardCopy) hashCardCopy.addEventListener('click', function (e) { e.stopPropagation(); copyAuditHash(); });
-  if (hashCardOpen) hashCardOpen.addEventListener('click', function (e) { e.stopPropagation(); openAuditPanel(); });
   if (auditOverlay) auditOverlay.addEventListener('click', function (e) {
     e.stopPropagation();
     if (e.target === auditOverlay) closeAuditPanel();
@@ -7220,11 +7093,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     auditParamsToggle.textContent = open ? '参数明文（点击收起）' : '参数明文（点击展开）';
     if (open) renderAuditParams();
   });
-
-  var auditLg8El = document.getElementById('lg8Toggle');
-  if (auditLg8El) auditLg8El.addEventListener('change', function () { refreshAudit('八人组开关'); });
-  window.addEventListener('lg-star', function () { refreshAudit('流星模式'); });
-  window.addEventListener('lg-preset', function () { refreshAudit('滚动模式'); });
 
   window.__lgAudit = {
     refresh: refreshAudit,
@@ -8159,7 +8027,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     var savedMode = false;
     try { savedMode = localStorage.getItem(MODE_KEY) === '1'; } catch (e) { __lgLog.warn('异常已捕获', e);}
     toggle.checked = savedMode;
-    if (window.__lgAudit && window.__lgAudit.refresh) window.__lgAudit.refresh('八人组载入');
     toggle.addEventListener('change', function () {
       try { localStorage.setItem(MODE_KEY, toggle.checked ? '1' : '0'); } catch (e) { __lgLog.warn('异常已捕获', e);}
     });
@@ -10485,8 +10352,8 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
    ========================================================== */
 (function () {
   'use strict';
-  var APP_VERSION = '8.0';  // 本地版本（与仓库根目录 version.json 对比）
-  var DISPLAY_VERSION = 'V8.0';
+  var APP_VERSION = '8.1';  // 本地版本（与仓库根目录 version.json 对比）
+  var DISPLAY_VERSION = 'V8.1';
   var PERF_KEY = 'lottery_perf_v1';
 
   function $(id) { return document.getElementById(id); }
