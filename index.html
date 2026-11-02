@@ -6,6 +6,112 @@
 <title>随机人员生成器 V8.0</title>
 <link rel="icon" href="data:,">
 <script>
+/* 全局日志 / 异常分级 / 短暂提示。尽早加载，后续所有模块统一写入。 */
+(function () {
+  'use strict';
+  var MAX = 200;
+  var groups = { error: [], command: [], audit: [] };
+  var lastKey = '', lastAt = 0, toastTimer = null;
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function timeText(ts) {
+    var d = new Date(ts);
+    return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+      pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function errText(err) {
+    if (!err) return '';
+    if (typeof err === 'string') return err;
+    var msg = err.message || String(err);
+    if (err.stack) msg += '\n' + String(err.stack).split('\n').slice(0, 3).join('\n');
+    return msg;
+  }
+  function add(group, level, msg, detail) {
+    if (!groups[group]) group = 'error';
+    var entry = {
+      ts: Date.now(),
+      level: level || 'info',
+      msg: String(msg || ''),
+      detail: detail || null
+    };
+    entry.time = timeText(entry.ts);
+    groups[group].push(entry);
+    if (groups[group].length > MAX) groups[group].splice(0, groups[group].length - MAX);
+    if (typeof window.dispatchEvent === 'function' && typeof window.CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('lg-log', { detail: { group: group, entry: entry } }));
+    }
+    var fn = level === 'error' ? console.error : (level === 'warn' ? console.warn : console.info);
+    if (typeof fn === 'function') fn.call(console, '[' + entry.time + '] ' + entry.msg, detail || '');
+    return entry;
+  }
+  function dedupe(group, level, msg, err) {
+    var key = msg + '|' + errText(err).slice(0, 160);
+    var t = Date.now();
+    if (key === lastKey && t - lastAt < 5000) return null;
+    lastKey = key;
+    lastAt = t;
+    return add(group, level, msg, err ? errText(err) : null);
+  }
+  function warn(msg, err) { return dedupe('error', 'warn', msg, err); }
+  function error(msg, err) { return add('error', 'error', msg, err ? errText(err) : null); }
+  function command(cmd, result) {
+    return add('command', 'info', '指令 ' + (cmd || '(空)') + (result ? ' · ' + result : ''));
+  }
+  function audit(trigger, oldHash, newHash, state) {
+    var detail = '触发：' + trigger + '\n旧：' + (oldHash || '(无)') +
+      '\n新：' + (newHash || '(无)') + (state ? '\n状态：' + state : '');
+    return add('audit', 'info', '哈希重算 · ' + trigger, detail);
+  }
+  function note(group, msg, detail) { return add(group, 'info', msg, detail); }
+  function clear(group) { if (groups[group]) groups[group].length = 0; }
+  function list(group) { return (groups[group] || []).slice(); }
+  function toast(msg) {
+    if (!document.body) return;
+    var el = document.getElementById('lgToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'lgToast';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2800);
+  }
+  function recover(reason) {
+    if (window.__lgAudit && typeof window.__lgAudit.recover === 'function') {
+      window.__lgAudit.recover(reason);
+    }
+  }
+  window.__lgLog = {
+    warn: warn,
+    error: error,
+    command: command,
+    audit: audit,
+    note: note,
+    clear: clear,
+    list: list,
+    toast: toast,
+    timeText: timeText
+  };
+  window.addEventListener('error', function (ev) {
+    if (ev && ev.target && ev.target !== window && !ev.error) {
+      var url = ev.target.src || ev.target.href || '';
+      if (url) dedupe('error', 'warn', '资源加载失败', url);
+      return;
+    }
+    error('未捕获异常', ev && (ev.error || ev.message));
+    toast('运行异常，已沿用上次可用配置');
+    recover('未捕获异常');
+  }, true);
+  window.addEventListener('unhandledrejection', function (ev) {
+    error('未处理的 Promise 异常', ev && ev.reason);
+    toast('运行异常，已沿用上次可用配置');
+    recover('未处理的 Promise 异常');
+  });
+})();
+</script>
+<script>
 /* 版本渠道：尽早读取上次选择并跳转，避免页面先渲染再闪跳。
    /beta/ 为测试版，站点根路径为正式版；本地 file:// 调试不跳转。 */
 (function () {
@@ -24,7 +130,7 @@
     if (saved === 'preview' && !onBeta) {
       var go = function () { location.replace(base + 'beta/'); };
       var fail = function () {
-        try { localStorage.removeItem('rplg_channel_v1'); } catch (e2) { }
+        try { localStorage.removeItem('rplg_channel_v1'); } catch (e2) { __lgLog.warn('异常已捕获', e2); }
       };
       /* 跳 Beta 前先确认 /beta/ 真的存在。部署失败或分支被删时清掉选择，
          避免用户被送进 404 且没有任何入口回正式版。
@@ -32,11 +138,11 @@
       if (typeof fetch !== 'function') { go(); return; }
       fetch('beta/version.json', { method: 'HEAD', cache: 'no-store' })
         .then(function (r) { if (r.ok) go(); else fail(); })
-        .catch(function () { });
+        .catch(function (err) { __lgLog.warn('Beta 渠道探测失败', err); });
     } else if (saved === 'release' && onBeta) {
       location.replace(base);
     }
-  } catch (e) { /* 存储不可用时按当前页面继续 */ }
+  } catch (e) { __lgLog.warn('异常已捕获', e); /* 存储不可用时按当前页面继续 */ }
 })();
 </script>
 <style>
@@ -501,6 +607,266 @@ body.jiale-bg {
   border-width: 1px;
   opacity: 1;
   pointer-events: auto;
+}
+
+/* 概率验真状态：绿=正常，橙=参数异常/配置被改，红=校验故障 */
+#complianceDot.warn { background: #d99a3d; }
+#complianceDot.fatal { background: #c96f63; }
+
+/* 首次进入的指示灯说明（仅一次，淡色小气泡） */
+.audit-tip {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  max-width: 232px;
+  padding: 7px 10px;
+  font-size: 11px;
+  line-height: 1.55;
+  letter-spacing: .2px;
+  color: var(--ink-2);
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid rgba(25, 35, 55, .06);
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(25, 35, 55, .08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 41;
+}
+.audit-tip::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 14px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border-left: 1px solid rgba(25, 35, 55, .06);
+  border-top: 1px solid rgba(25, 35, 55, .06);
+  transform: rotate(45deg);
+}
+html[data-theme="dark"] .audit-tip {
+  color: var(--ink-2);
+  background: rgba(34, 40, 52, .82);
+  border-color: rgba(255, 255, 255, .08);
+}
+
+/* 简易哈希悬浮卡片 */
+#hashCard {
+  position: fixed;
+  top: 66px;
+  left: 24px;
+  width: min(322px, calc(100vw - 48px));
+  padding: 16px 18px 14px;
+  z-index: 45;
+  opacity: 0;
+  transform: translateY(-6px) scale(.98);
+  pointer-events: none;
+  filter: blur(4px);
+  transition: opacity .22s var(--ease-out), transform .26s var(--spring-soft), filter .26s var(--spring-soft);
+}
+#hashCard.show { opacity: 1; transform: none; filter: none; pointer-events: auto; }
+.hash-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.hash-card-title {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .6px;
+  color: var(--ink);
+}
+.hash-card-state {
+  font-size: 10.5px;
+  letter-spacing: .4px;
+  color: var(--ink-3);
+}
+.hash-card-state.ok { color: #4f9e75; }
+.hash-card-state.warn { color: #b97d24; }
+.hash-card-state.fatal { color: #b4564b; }
+#hashCardCode {
+  display: block;
+  padding: 9px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.55;
+  letter-spacing: .2px;
+  color: var(--ink-strong);
+  word-break: break-all;
+  background: rgba(255, 255, 255, var(--mat-control-opacity));
+  border: 1px solid rgba(25, 35, 55, .05);
+  border-radius: var(--mat-control-radius);
+  box-shadow: var(--mat-control-inset);
+}
+html[data-theme="dark"] #hashCardCode {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .07);
+}
+.hash-card-note {
+  margin: 8px 0 10px;
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.hash-card-actions { display: flex; gap: 8px; }
+.hash-card-actions button,
+.audit-actions button,
+.audit-params-toggle {
+  flex: 1;
+  padding: 7px 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: .3px;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: var(--mat-control-radius);
+  background: rgba(255, 255, 255, var(--mat-control-opacity));
+  border: 1px solid rgba(25, 35, 55, .06);
+  box-shadow: var(--mat-control-inset);
+  transition: transform .2s var(--spring-soft), background .2s;
+}
+.hash-card-actions button:active,
+.audit-actions button:active,
+.audit-params-toggle:active { transform: scale(.98); }
+html[data-theme="dark"] .hash-card-actions button,
+html[data-theme="dark"] .audit-actions button,
+html[data-theme="dark"] .audit-params-toggle {
+  background: rgba(255, 255, 255, .1);
+  border-color: rgba(255, 255, 255, .08);
+}
+
+/* 完整审计面板 */
+#auditOverlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+}
+#auditDialog {
+  width: min(430px, 92vw);
+  max-height: 78vh;
+  overflow-y: auto;
+  padding: 20px 22px 18px;
+  opacity: 0;
+  transform: translateY(8px) scale(.97);
+  filter: blur(6px);
+  transition: opacity .22s var(--ease-out), transform .26s var(--spring-soft), filter .26s var(--spring-soft);
+}
+#auditOverlay.show #auditDialog { opacity: 1; transform: none; filter: none; }
+.audit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  margin: 2px 0 12px;
+  font-size: 11px;
+  letter-spacing: .4px;
+  border-radius: 999px;
+  color: #2f6e4f;
+  background: rgba(203, 233, 216, .4);
+}
+.audit-status.warn { color: #8a5b12; background: rgba(245, 220, 170, .45); }
+.audit-status.fatal { color: #9c463c; background: rgba(243, 205, 201, .45); }
+.audit-hash-label {
+  font-size: 10.5px;
+  letter-spacing: .8px;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+#auditHash {
+  display: block;
+  padding: 10px 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+  letter-spacing: .2px;
+  word-break: break-all;
+  color: var(--ink-strong);
+  background: rgba(255, 255, 255, var(--mat-control-opacity));
+  border: 1px solid rgba(25, 35, 55, .05);
+  border-radius: var(--mat-control-radius);
+  box-shadow: var(--mat-control-inset);
+}
+html[data-theme="dark"] #auditHash {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .07);
+}
+.audit-actions { display: flex; gap: 8px; margin-top: 10px; }
+.audit-note {
+  margin: 12px 0;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+.audit-params-toggle { width: 100%; flex: none; text-align: left; }
+.audit-params {
+  margin-top: 9px;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, .35);
+  border: 1px solid rgba(25, 35, 55, .05);
+  border-radius: 12px;
+}
+html[data-theme="dark"] .audit-params {
+  background: rgba(255, 255, 255, .06);
+  border-color: rgba(255, 255, 255, .06);
+}
+.audit-param-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  border-bottom: 1px dashed rgba(25, 35, 55, .05);
+}
+.audit-param-row:last-child { border-bottom: 0; }
+.audit-param-row.changed { color: #9a6412; }
+.audit-param-row code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--ink);
+}
+.audit-param-section {
+  margin: 8px 0 4px;
+  font-size: 10px;
+  letter-spacing: .8px;
+  color: var(--ink-3);
+}
+html[data-theme="dark"] .audit-param-row.changed { color: #e6b76a; }
+
+/* 全局短暂提示 */
+#lgToast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 12px);
+  max-width: min(360px, 86vw);
+  padding: 9px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: .3px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, .84);
+  border: 1px solid rgba(25, 35, 55, .06);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(25, 35, 55, .14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 600;
+  transition: opacity .24s ease, transform .3s var(--spring-soft);
+}
+#lgToast.show { opacity: 1; transform: translate(-50%, 0); }
+html[data-theme="dark"] #lgToast {
+  color: var(--ink-strong);
+  background: rgba(34, 40, 52, .9);
+  border-color: rgba(255, 255, 255, .08);
 }
 
 /* 核心数字区：绝对视觉中心，多槽位中心对称布局 */
@@ -3881,7 +4247,8 @@ html.lg-compat .vg-success { background-position: 130% 50%; }
   z-index: 260;
 }
 #devToolsDialog {
-  width: min(360px, 88vw);
+  width: min(430px, 92vw);
+  max-height: 78vh;
   padding: 20px 22px 18px;
   opacity: 0;
   transform: translateY(8px) scale(.97);
@@ -3955,6 +4322,76 @@ html[data-theme="dark"] #devCommandRun {
   border-color: rgba(255, 255, 255, .08);
 }
 html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .18); }
+.dev-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16px 0 7px;
+  font-size: 11px;
+  letter-spacing: .5px;
+  color: var(--ink-3);
+}
+#devLogClear {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: inherit;
+  color: var(--ink-3);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(25, 35, 55, .07);
+  border-radius: 999px;
+}
+.dev-log-tabs { display: flex; gap: 6px; }
+.dev-log-tab {
+  flex: 1;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-family: inherit;
+  letter-spacing: .3px;
+  color: var(--ink-3);
+  cursor: pointer;
+  background: rgba(255, 255, 255, .35);
+  border: 1px solid rgba(25, 35, 55, .05);
+  border-radius: 8px;
+  transition: background .2s, color .2s, border-color .2s;
+}
+.dev-log-tab.active {
+  color: var(--ink);
+  background: rgba(255, 255, 255, .72);
+  border-color: rgba(143, 180, 232, .4);
+}
+html[data-theme="dark"] .dev-log-tab { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .07); }
+html[data-theme="dark"] .dev-log-tab.active { color: var(--ink-strong); background: rgba(255, 255, 255, .14); }
+.dev-log-view {
+  margin-top: 8px;
+  height: min(210px, 30vh);
+  overflow-y: auto;
+  padding: 8px 9px;
+  background: rgba(20, 26, 38, .05);
+  border: 1px solid rgba(25, 35, 55, .05);
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  overscroll-behavior: contain;
+}
+html[data-theme="dark"] .dev-log-view { background: rgba(0, 0, 0, .18); border-color: rgba(255, 255, 255, .06); }
+.dev-log-empty { padding: 18px 0; text-align: center; color: var(--ink-3); font-family: inherit; }
+.dev-log-item { padding: 4px 0; border-bottom: 1px solid rgba(25, 35, 55, .045); }
+.dev-log-item:last-child { border-bottom: 0; }
+.dev-log-time { color: var(--ink-3); margin-right: 6px; }
+.dev-log-item.level-error .dev-log-msg { color: #b4564b; }
+.dev-log-item.level-warn .dev-log-msg { color: #a2701f; }
+html[data-theme="dark"] .dev-log-item.level-error .dev-log-msg { color: #ef9a8f; }
+html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; }
+.dev-log-detail {
+  margin-top: 2px;
+  padding-left: 10px;
+  color: var(--ink-3);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
 
 /* ===== end fixes & options ===== */
 </style>
@@ -3969,20 +4406,20 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   }
   try {
     for (var i = 0; i < NO_PERSIST.length; i++) localStorage.removeItem(NO_PERSIST[i]);
-  } catch (e) {}
+  } catch (e) { __lgLog.warn('异常已捕获', e);}
   try {
     var proto = Object.getPrototypeOf(window.localStorage);
     var origSet = proto.setItem;
     proto.setItem = function (k, v) {
       if (blocked(k)) {
         // 不落盘，但把最新值交给运行时（八人组加权抽取）使用
-        try { window.__lgProb = JSON.parse(v); } catch (e) { window.__lgProb = null; }
+        try { window.__lgProb = JSON.parse(v); } catch (e) { __lgLog.warn('异常已捕获', e); window.__lgProb = null; }
         return;
       }
       return origSet.call(this, k, v);
     };
     window.__lgNoPersist = NO_PERSIST.slice();
-  } catch (e) {}
+  } catch (e) { __lgLog.warn('异常已捕获', e);}
 })();
 </script>
 </head>
@@ -4115,7 +4552,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     };
     window.__lgBootDefaults = BOOT_DEFAULTS;
 
-    function store(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+    function store(key, value) { try { localStorage.setItem(key, value); } catch (e) { __lgLog.warn('异常已捕获', e);} }
 
     /* 优先驱动现有控件：模块内部状态与本地存储一起更新 */
     function setToggle(id, on, key) {
@@ -4143,7 +4580,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       else {
         var m = cfg.preset === 'classic' ? 'c' : cfg.preset;
         store('lg_hscroll_v1', m);
-        try { window.dispatchEvent(new CustomEvent('lg-preset', { detail: m })); } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('lg-preset', { detail: m })); } catch (e) { __lgLog.warn('异常已捕获', e);}
       }
 
       store('lg_star_mode_v1', cfg.star);
@@ -4153,7 +4590,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
            庆典期间 Ind 被禁用时只落盘，等下次加载生效，避免界面/行为不一致 */
         if (!star.disabled) star.click();
       } else {
-        try { window.dispatchEvent(new CustomEvent('lg-star', { detail: cfg.star })); } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('lg-star', { detail: cfg.star })); } catch (e) { __lgLog.warn('异常已捕获', e);}
       }
 
       var compatMode = cfg.compat ? 'on' : 'auto';
@@ -4174,7 +4611,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     if (!ob) return;
 
     var seen = false;
-    try { seen = localStorage.getItem(ONBOARD_KEY) === '1'; } catch (e) { seen = true; }
+    try { seen = localStorage.getItem(ONBOARD_KEY) === '1'; } catch (e) { __lgLog.warn('异常已捕获', e); seen = true; }
     if (seen) { ob.style.display = 'none'; return; }
 
     store(ONBOARD_KEY, '1');            // 只在首次打开出现
@@ -4336,10 +4773,10 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       if (closing) return;
       closing = true;
       stopHello();
-      try { window.__lgApplyBootConfig(cfg); } catch (e) {}
+      try { window.__lgApplyBootConfig(cfg); } catch (e) { __lgLog.warn('异常已捕获', e);}
       /* 试用佳乐庆典：与其他设置同时生效，进入主界面即处于常驻庆典状态 */
       if (jialeWanted) {
-        try { if (window.__lgJiale) window.__lgJiale.set(true, true); } catch (e) {}
+        try { if (window.__lgJiale) window.__lgJiale.set(true, true); } catch (e) { __lgLog.warn('异常已捕获', e);}
       }
       document.body.classList.add('ob-entering');
       ob.classList.add('leaving');
@@ -4374,8 +4811,21 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
 
   <div class="title-area" id="titleArea">
     <div id="title">随机人员生成器 V8.0</div>
-    <button id="complianceDot" type="button" aria-label="合规状态指示灯"></button>
+    <button id="complianceDot" type="button" aria-label="概率验真状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
+    <div id="auditTip" class="audit-tip" hidden>校验当前概率配置，哈希变化即代表配置被修改</div>
+  </div>
+  <div id="hashCard" class="glass mat-floating" role="dialog" aria-label="概率配置哈希" aria-hidden="true">
+    <div class="hash-card-head">
+      <span class="hash-card-title">概率配置指纹</span>
+      <span id="hashCardState" class="hash-card-state">校验正常</span>
+    </div>
+    <code id="hashCardCode">—</code>
+    <div class="hash-card-note">该哈希由当前概率参数算出，哈希变化即代表运行中的配置被修改。</div>
+    <div class="hash-card-actions">
+      <button id="hashCardCopy" type="button">复制哈希</button>
+      <button id="hashCardOpen" type="button">展开审计面板</button>
+    </div>
   </div>
   <div class="top-actions">
     <div class="pick-wrap" id="pickWrap">
@@ -4747,6 +5197,16 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         </div>
         <button id="devCommandRun" type="button">执行</button>
       </div>
+      <div class="dev-log-head">
+        <span>运行日志</span>
+        <button id="devLogClear" type="button">清空当前分组</button>
+      </div>
+      <div class="dev-log-tabs" role="tablist" aria-label="日志分组">
+        <button class="dev-log-tab active" type="button" data-log-group="error" role="tab" aria-selected="true">异常</button>
+        <button class="dev-log-tab" type="button" data-log-group="command" role="tab" aria-selected="false">指令</button>
+        <button class="dev-log-tab" type="button" data-log-group="audit" role="tab" aria-selected="false">审计记录</button>
+      </div>
+      <div id="devLogView" class="dev-log-view" role="log" aria-live="polite"></div>
     </div>
   </div>
 
@@ -4759,6 +5219,26 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         <button id="channelCancel" class="dialog-btn" type="button">取消</button>
         <button id="channelConfirm" class="dialog-btn" type="button">切换并刷新</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 本地合规审计验真：完整参数明文 + SHA-256 指纹 -->
+  <div id="auditOverlay" class="scrim" role="dialog" aria-modal="true" aria-labelledby="auditTitle">
+    <div id="auditDialog" class="glass mat-modal">
+      <div class="drawer-header">
+        <span id="auditTitle">合规审计验真</span>
+        <button id="auditCloseBtn" class="sub-back-btn" type="button">×</button>
+      </div>
+      <div id="auditStatus" class="audit-status">校验正常</div>
+      <div class="audit-hash-label">SHA-256 哈希指纹</div>
+      <code id="auditHash">—</code>
+      <div class="audit-actions">
+        <button id="auditCopyBtn" type="button">复制哈希</button>
+        <button id="auditRefreshBtn" type="button">重新计算</button>
+      </div>
+      <p class="audit-note">该哈希由当前整套生效概率参数（权重、庆典开关、指定人员等）实时算出。哈希发生变化，代表运行中的概率配置被修改。</p>
+      <button id="auditParamsToggle" class="audit-params-toggle" type="button" aria-expanded="false">参数明文（点击展开）</button>
+      <div id="auditParams" class="audit-params" hidden></div>
     </div>
   </div>
 
@@ -4862,17 +5342,25 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
 
   function loadWeights() {
     try {
-      var arr = JSON.parse(localStorage.getItem(WEIGHTS_KEY));
-      if (!Array.isArray(arr) || arr.length !== NAMES.length) return null; // 旧数据/长度不符 → 默认
+      var raw = localStorage.getItem(WEIGHTS_KEY);
+      if (!raw) return null; // 首次使用，无本地权重
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr) || arr.length !== NAMES.length) {
+        __lgLog.warn('本地权重格式异常（长度不符），已回退默认值');
+        return null; // 旧数据/长度不符 → 默认
+      }
       for (var i = 0; i < arr.length; i++) {
-        if (typeof arr[i] !== 'number' || !isFinite(arr[i]) || arr[i] < 0 || arr[i] > 10) return null;
+        if (typeof arr[i] !== 'number' || !isFinite(arr[i]) || arr[i] < 0 || arr[i] > 10) {
+          __lgLog.warn('本地权重越界或类型非法（第 ' + (i + 1) + ' 项），已回退默认值');
+          return null;
+        }
       }
       return arr;
-    } catch (e) { return null; }
+    } catch (e) { __lgLog.warn('异常已捕获', e); return null; }
   }
 
   function saveWeights() {
-    try { localStorage.setItem(WEIGHTS_KEY, JSON.stringify(weights)); } catch (e) { /* 存储不可用时静默忽略 */ }
+    try { localStorage.setItem(WEIGHTS_KEY, JSON.stringify(weights)); } catch (e) { __lgLog.warn('异常已捕获', e); /* 存储不可用时静默忽略 */ }
   }
 
   var loadedWeights = loadWeights();
@@ -4998,7 +5486,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       var nm = rows[i].querySelector('.prob-name');
       if (nm && nm.textContent.indexOf('周佳乐') !== -1) rows[i].classList.toggle('jiale-active', !!on);
     }
-    refreshCompliance();
+    refreshCompliance('庆典开关');
   }
   window.__lgJiale = { set: setJiale, on: function () { return jialeMode; } };
 
@@ -5021,11 +5509,11 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         out.push({ t: it.t, name: it.name });
       }
       return out;
-    } catch (e) { return []; }
+    } catch (e) { __lgLog.warn('异常已捕获', e); return []; }
   }
 
   function saveHistory(arr) {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); } catch (e) { /* 存储不可用时静默忽略 */ }
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr)); } catch (e) { __lgLog.warn('异常已捕获', e); /* 存储不可用时静默忽略 */ }
   }
 
   var historyRecords = loadHistory();
@@ -5358,7 +5846,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         osc.start(t);
         osc.stop(t + n.dur + 0.05);
       });
-    } catch (e) { /* 音频不可用时静默忽略 */ }
+    } catch (e) { __lgLog.warn('异常已捕获', e); /* 音频不可用时静默忽略 */ }
   }
 
   function playJialeSound() {
@@ -5390,7 +5878,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f) {
         note(f, t0 + 0.4, 0.09, 0.9);
       });
-    } catch (e) { /* 音频不可用时静默忽略 */ }
+    } catch (e) { __lgLog.warn('异常已捕获', e); /* 音频不可用时静默忽略 */ }
   }
 
   /* 流星模式下音效统一由流星模块在结果归位完成后播放；
@@ -5409,7 +5897,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       slots[settledIdx].textContent = forcedName;
       forcedName = null;
       if (forcedWasJiale) document.body.classList.remove('jiale-bg'); // 橙色背景恢复
-      refreshCompliance(); // 彩蛋已消耗，刷新合规状态
+      refreshCompliance('指定人员生效'); // 彩蛋已消耗，刷新合规状态
     }
 
     // 逐个模式：定格一格后继续滚动，直到全部定格
@@ -5440,7 +5928,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     if (jialeMode && !jialeHold) {
       jialeMode = false;
       document.body.classList.remove('jiale-bg'); // 恢复常规背景
-      refreshCompliance();
+      refreshCompliance('庆典结束');
     }
 
     // 逐人记录本次抽奖结果
@@ -5482,13 +5970,25 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   document.addEventListener('click', function (e) {
     if (performance.now() < suppressClickUntil) return;
     if (e.clientY < SAFE_TOP_PX) return; // 防误触：按顶部按钮时不误开始抽取
-    if (phase === 'idle') beginSpin();
-    else stop();
+    try {
+      if (phase === 'idle') beginSpin();
+      else stop();
+    } catch (err) {
+      __lgLog.error('抽奖核心流程异常', err);
+      __lgLog.toast('运行异常，已沿用上次可用配置');
+      recoverAuditConfig(err && err.message);
+    }
   });
 
   resetBtn.addEventListener('click', function (e) {
     e.stopPropagation(); // 阻止冒泡，避免触发“点击停止”
-    reset();
+    try {
+      reset();
+    } catch (err) {
+      __lgLog.error('重新摇号流程异常', err);
+      __lgLog.toast('运行异常，已沿用上次可用配置');
+      recoverAuditConfig(err && err.message);
+    }
   });
 
   // ---------- 长按标题 → 设置面板 ----------
@@ -5593,6 +6093,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     Array.prototype.forEach.call(countOpts.children, function (b) {
       b.classList.toggle('active', b === btn);
     });
+    refreshAudit('抽取人数');
   });
 
   modeOpts.addEventListener('click', function (e) {
@@ -5602,6 +6103,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     Array.prototype.forEach.call(modeOpts.children, function (b) {
       b.classList.toggle('active', b === btn);
     });
+    refreshAudit('抽取方式');
   });
 
   // 初始化多槽位
@@ -5651,7 +6153,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       forcedName = name; // 后台静默标记：下一次停止强制必中，抽中后自动清空
       if (name === '周佳乐') document.body.classList.add('jiale-bg'); // 指定周佳乐：背景渐变暖橙
       showFeedback('已指定「' + name + '」，下一次抽奖必定抽中', false);
-      refreshCompliance(); // 指定已激活，实时刷新合规状态
+      refreshCompliance('指定人员设置'); // 指定已激活，实时刷新合规状态
     } else {
       showFeedback('名单中不存在该人，请核对输入', true);
     }
@@ -5759,7 +6261,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         valEl.textContent = weights[i];
         sliderFill(slider, weights[i]);
         refreshProbabilities(); // 总权重变化 → 刷新全部概率（仅文本节点）
-        refreshCompliance(); // 动了概率 → 合规校验失败
+        refreshCompliance('概率权重'); // 动了概率 → 合规校验失败
         saveWeights();       // 实时持久化
       });
 
@@ -5824,7 +6326,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     for (var i = 0; i < weights.length; i++) weights[i] = 1;
     saveWeights();
     buildProbPool();
-    refreshCompliance();
+    refreshCompliance('恢复默认权重');
   });
 
   // ---------- 三级界面：分区入口 ----------
@@ -5865,14 +6367,66 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   var devToolsCloseBtn = document.getElementById('devToolsCloseBtn');
   var devCommandInput = document.getElementById('devCommandInput');
   var devCommandRun = document.getElementById('devCommandRun');
+  var devLogView = document.getElementById('devLogView');
+  var devLogClear = document.getElementById('devLogClear');
+  var devLogTabs = document.querySelectorAll('.dev-log-tab');
+  var devLogGroup = 'error';
+  var DEV_LOG_LABELS = { error: '异常', command: '指令', audit: '审计记录' };
+
+  function renderDevLog() {
+    if (!devLogView) return;
+    var entries = (window.__lgLog && window.__lgLog.list) ? window.__lgLog.list(devLogGroup) : [];
+    devLogView.innerHTML = '';
+    if (!entries.length) {
+      var empty = document.createElement('div');
+      empty.className = 'dev-log-empty';
+      empty.textContent = '暂无' + (DEV_LOG_LABELS[devLogGroup] || '') + '记录';
+      devLogView.appendChild(empty);
+      return;
+    }
+    for (var i = entries.length - 1; i >= 0; i--) {
+      var entry = entries[i];
+      var item = document.createElement('div');
+      item.className = 'dev-log-item level-' + (entry.level || 'info');
+      var time = document.createElement('span');
+      time.className = 'dev-log-time';
+      time.textContent = entry.time || '';
+      var msg = document.createElement('span');
+      msg.className = 'dev-log-msg';
+      msg.textContent = entry.msg || '';
+      item.appendChild(time);
+      item.appendChild(msg);
+      if (entry.detail) {
+        var detail = document.createElement('div');
+        detail.className = 'dev-log-detail';
+        detail.textContent = entry.detail;
+        item.appendChild(detail);
+      }
+      devLogView.appendChild(item);
+    }
+    devLogView.scrollTop = 0;
+  }
+
+  function updateDevLogCounts() {
+    for (var i = 0; i < devLogTabs.length; i++) {
+      var b = devLogTabs[i];
+      var g = b.getAttribute('data-log-group');
+      var n = (window.__lgLog && window.__lgLog.list) ? window.__lgLog.list(g).length : 0;
+      b.textContent = (DEV_LOG_LABELS[g] || g) + (n ? ' (' + n + ')' : '');
+      b.classList.toggle('active', g === devLogGroup);
+      b.setAttribute('aria-selected', g === devLogGroup ? 'true' : 'false');
+    }
+  }
 
   function openDevTools() {
     if (!devToolsOverlay) return;
     devToolsOverlay.classList.add('show');
+    updateDevLogCounts();
+    renderDevLog();
     if (devCommandInput) {
       devCommandInput.value = '';
       setTimeout(function () {
-        try { devCommandInput.focus({ preventScroll: true }); } catch (err) { devCommandInput.focus(); }
+        try { devCommandInput.focus({ preventScroll: true }); } catch (err) { __lgLog.warn('异常已捕获', err); devCommandInput.focus(); }
       }, 180);
     }
   }
@@ -5887,15 +6441,23 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     if (!devCommandInput) return;
     var cmd = String(devCommandInput.value || '').trim().toUpperCase();
     devCommandInput.value = '';
+    var result = '未知指令，已忽略';
     if (cmd === 'W8') {
+      result = '重播 v8.0 更新引导';
       closeDevTools();
       closePanel();
-      try { if (window.__v8Guide && window.__v8Guide.replay) window.__v8Guide.replay(); } catch (err) {}
+      try { if (window.__v8Guide && window.__v8Guide.replay) window.__v8Guide.replay(); }
+      catch (err) { __lgLog.error('W8 指令执行失败', err); result = '执行失败'; }
     } else if (cmd === 'W1') {
+      result = '打开项目主页';
       closeDevTools();
-      try { window.open('https://github.com/Qicny233/RandomlyPick-LiquidGlass', '_blank', 'noopener'); } catch (err) {}
+      try { window.open('https://github.com/Qicny233/RandomlyPick-LiquidGlass', '_blank', 'noopener'); }
+      catch (err) { __lgLog.error('W1 指令执行失败', err); result = '执行失败'; }
     }
-    /* 未知指令：静默忽略 */
+    /* 未知指令：静默忽略，只写入调试日志 */
+    if (window.__lgLog) __lgLog.command(cmd || '(空)', result);
+    updateDevLogCounts();
+    renderDevLog();
   }
 
   if (devToolsLink) devToolsLink.addEventListener('click', function (e) {
@@ -5930,6 +6492,28 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       closeDevTools();
     }
   });
+  Array.prototype.forEach.call(devLogTabs, function (tab) {
+    tab.addEventListener('click', function (e) {
+      e.stopPropagation();
+      devLogGroup = tab.getAttribute('data-log-group') || 'error';
+      updateDevLogCounts();
+      renderDevLog();
+    });
+  });
+  if (devLogClear) devLogClear.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (window.__lgLog) window.__lgLog.clear(devLogGroup);
+    updateDevLogCounts();
+    renderDevLog();
+  });
+  window.addEventListener('lg-log', function (e) {
+    updateDevLogCounts();
+    if (devToolsOverlay && devToolsOverlay.classList.contains('show') &&
+        e.detail && e.detail.group === devLogGroup) {
+      renderDevLog();
+    }
+  });
+  updateDevLogCounts();
 
   // ---------- 三级界面：关于此程序 ----------
   aboutLink.addEventListener('click', function (e) {
@@ -6060,10 +6644,9 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     return issues;
   }
 
-  function refreshCompliance() {
+  function refreshCompliance(auditTrigger) {
     var pass = checkCompliance().length === 0;
-    complianceDot.classList.toggle('pass', pass);
-    complianceDot.classList.toggle('fail', !pass);
+    /* 指示灯颜色由审计模块统一管理：绿=正常 / 橙=参数异常 / 红=校验故障 */
     complianceBtn.classList.toggle('pass', pass);
     complianceBtn.classList.toggle('fail', !pass);
     complianceBtn.textContent = pass ? '合规校验通过' : '合规校验失败';
@@ -6074,6 +6657,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       stateEl.classList.toggle('pass', pass);
       stateEl.classList.toggle('fail', !pass);
     }
+    if (auditReady) refreshAudit(auditTrigger || '配置变更');
   }
 
   function openComplianceDialog() {
@@ -6113,7 +6697,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     for (var i = 0; i < weights.length; i++) weights[i] = 1;
     saveWeights();
     buildProbPool();
-    refreshCompliance();
+    refreshCompliance('一键修复');
     openComplianceDialog(); // 重新渲染报告
   }
 
@@ -6126,14 +6710,19 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     complianceOverlay.classList.remove('show');
   }
 
-  // 指示灯：点击平滑展开文字按钮，再点进入合规报告
+  // 指示灯：首次点击展开合规状态，再次点击弹出哈希卡片
   var complianceExpanded = false;
 
   complianceDot.addEventListener('click', function (e) {
     e.stopPropagation();
+    if (auditTip) { auditTip.hidden = true; markAuditTipSeen(); }
     closeTopControls('compliance'); // 互斥：先收起其他展开项
-    complianceExpanded = !complianceExpanded;
-    titleArea.classList.toggle('expanded', complianceExpanded);
+    if (!complianceExpanded) {
+      complianceExpanded = true;
+      titleArea.classList.add('expanded');
+    } else {
+      toggleHashCard();
+    }
   });
 
   complianceBtn.addEventListener('click', function (e) {
@@ -6141,11 +6730,14 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     openComplianceDialog();
   });
 
-  // 点击页面其他位置收起指示灯
-  document.addEventListener('click', function () {
+  // 点击页面其他位置收起指示灯与哈希卡片
+  document.addEventListener('click', function (e) {
     if (complianceExpanded) {
       complianceExpanded = false;
       titleArea.classList.remove('expanded');
+    }
+    if (hashCard && hashCard.classList.contains('show') && !hashCard.contains(e.target)) {
+      closeHashCard();
     }
   });
 
@@ -6167,7 +6759,486 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   });
 
   // 初始化合规状态
-  refreshCompliance();
+  refreshCompliance('初始化');
+
+  // ==========================================================
+  // 本地合规审计验真：对当前整套生效概率参数计算 SHA-256 指纹
+  // 纯前端内存校验，不联网；参数变化 / 打开面板 / 手动刷新时重算
+  // ==========================================================
+  var AUDIT_TIP_KEY = 'rplg_audit_tip_v1';
+  var auditReady = false;
+  var auditState = 'ok';
+  var auditHash = '';
+  var auditConfig = null;
+  var auditIssues = [];
+  var lastGoodAudit = null;
+  var auditTimer = null;
+  var auditPendingTrigger = '初始化';
+  var auditRecovering = false;
+
+  var auditTip = document.getElementById('auditTip');
+  var hashCard = document.getElementById('hashCard');
+  var hashCardState = document.getElementById('hashCardState');
+  var hashCardCode = document.getElementById('hashCardCode');
+  var hashCardCopy = document.getElementById('hashCardCopy');
+  var hashCardOpen = document.getElementById('hashCardOpen');
+  var auditOverlay = document.getElementById('auditOverlay');
+  var auditDialog = document.getElementById('auditDialog');
+  var auditCloseBtn = document.getElementById('auditCloseBtn');
+  var auditStatusEl = document.getElementById('auditStatus');
+  var auditHashEl = document.getElementById('auditHash');
+  var auditCopyBtn = document.getElementById('auditCopyBtn');
+  var auditRefreshBtn = document.getElementById('auditRefreshBtn');
+  var auditParamsToggle = document.getElementById('auditParamsToggle');
+  var auditParamsEl = document.getElementById('auditParams');
+
+  /* 纯 JS SHA-256：不依赖 crypto.subtle，file:// 打开也能算 */
+  function sha256Hex(input) {
+    function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+    var K = [
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    ];
+    var H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    var bytes;
+    if (typeof TextEncoder !== 'undefined') {
+      bytes = new TextEncoder().encode(String(input));
+    } else {
+      bytes = [];
+      var s = String(input);
+      for (var ci = 0; ci < s.length; ci++) {
+        var code = s.charCodeAt(ci);
+        if (code < 0x80) bytes.push(code);
+        else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+        else bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+      }
+    }
+    var len = bytes.length;
+    var bitLen = len * 8;
+    var paddedLen = ((len + 9 + 63) >> 6) << 6;
+    var padded = new Uint8Array(paddedLen);
+    for (var bi = 0; bi < len; bi++) padded[bi] = bytes[bi];
+    padded[len] = 0x80;
+    var dv = new DataView(padded.buffer);
+    dv.setUint32(paddedLen - 8, Math.floor(bitLen / 0x100000000), false);
+    dv.setUint32(paddedLen - 4, bitLen >>> 0, false);
+    var w = new Uint32Array(64);
+    for (var off = 0; off < paddedLen; off += 64) {
+      for (var i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
+      for (i = 16; i < 64; i++) {
+        var s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+        var s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+      }
+      var a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (i = 0; i < 64; i++) {
+        var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        var ch = (e & f) ^ (~e & g);
+        var t1 = (h + S1 + ch + K[i] + w[i]) >>> 0;
+        var S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        var maj = (a & b) ^ (a & c) ^ (b & c);
+        var t2 = (S0 + maj) >>> 0;
+        h = g; g = f; f = e; e = (d + t1) >>> 0;
+        d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    var out = '';
+    for (i = 0; i < 8; i++) out += ('00000000' + H[i].toString(16)).slice(-8);
+    return out;
+  }
+
+  function readStarMode() {
+    try { return localStorage.getItem('lg_star_mode_v1') === 'ind' ? 'ind' : 'once'; }
+    catch (e) { __lgLog.warn('读取流星模式失败', e); return 'once'; }
+  }
+
+  function readViewMode() {
+    try {
+      var v = localStorage.getItem('lg_hscroll_v1');
+      return (v === 'h' || v === 'meteor') ? v : 'classic';
+    } catch (e) { __lgLog.warn('读取滚动模式失败', e); return 'classic'; }
+  }
+
+  function buildAuditConfig() {
+    var lg8El = document.getElementById('lg8Toggle');
+    return {
+      schema: 'rplg-prob-audit/1',
+      weights: weights.map(function (w) { return (typeof w === 'number' && isFinite(w)) ? w : String(w); }),
+      forced: forcedName === null ? null : String(forcedName),
+      jiale: !!jialeMode,
+      jialeHold: !!jialeHold,
+      count: pickCount,
+      mode: pickMode,
+      lg8: !!(lg8El && lg8El.checked),
+      star: readStarMode(),
+      view: readViewMode()
+    };
+  }
+
+  function validateAuditConfig(cfg) {
+    var issues = [];
+    if (!Array.isArray(cfg.weights) || cfg.weights.length !== NAMES.length) {
+      issues.push('权重数量与人员池不一致（应为 ' + NAMES.length + ' 项）');
+    } else {
+      for (var i = 0; i < cfg.weights.length; i++) {
+        var w = cfg.weights[i];
+        if (typeof w !== 'number' || !isFinite(w) || w < 0 || w > 10) {
+          issues.push('第 ' + (i + 1) + ' 项权重非法：' + String(w));
+          break;
+        }
+      }
+    }
+    if (cfg.forced !== null && typeof cfg.forced !== 'string') issues.push('指定人员格式非法');
+    if (typeof cfg.jiale !== 'boolean' || typeof cfg.jialeHold !== 'boolean') issues.push('庆典开关格式非法');
+    if (!(cfg.count >= 1 && cfg.count <= 4 && Math.floor(cfg.count) === cfg.count)) issues.push('抽取人数越界');
+    if (cfg.mode !== 'one' && cfg.mode !== 'all') issues.push('抽取方式非法');
+    if (typeof cfg.lg8 !== 'boolean') issues.push('八人组开关格式非法');
+    if (cfg.star !== 'once' && cfg.star !== 'ind') issues.push('流星模式取值非法');
+    if (cfg.view !== 'classic' && cfg.view !== 'h' && cfg.view !== 'meteor') issues.push('滚动模式取值非法');
+    return issues;
+  }
+
+  function auditConfigText(cfg) {
+    return JSON.stringify(cfg, function (key, value) {
+      if (typeof value === 'number' && !isFinite(value)) return 'non-finite:' + String(value);
+      return value;
+    });
+  }
+
+  function computeAudit() {
+    var cfg = buildAuditConfig();
+    var issues = validateAuditConfig(cfg);
+    var hash = '';
+    var fatal = false;
+    try {
+      hash = sha256Hex(auditConfigText(cfg));
+    } catch (err) {
+      fatal = true;
+      __lgLog.error('SHA-256 计算失败', err);
+    }
+    var fairness = [];
+    if (!fatal) {
+      try { fairness = checkCompliance(); }
+      catch (err2) {
+        fatal = true;
+        __lgLog.error('合规状态读取失败', err2);
+      }
+    }
+    var state = fatal ? 'fatal' : ((issues.length || fairness.length) ? 'warn' : 'ok');
+    return { cfg: cfg, issues: issues, fairness: fairness, hash: hash, state: state };
+  }
+
+  function auditStatusText() {
+    if (auditState === 'fatal') return '校验故障';
+    if (auditState === 'warn') {
+      return auditIssues.length ? '参数异常' : '配置已修改';
+    }
+    return '校验正常';
+  }
+
+  function cloneAuditConfig(cfg) {
+    return {
+      weights: cfg.weights.slice(),
+      forced: cfg.forced,
+      jiale: cfg.jiale,
+      jialeHold: cfg.jialeHold,
+      count: cfg.count,
+      mode: cfg.mode,
+      lg8: cfg.lg8,
+      star: cfg.star,
+      view: cfg.view
+    };
+  }
+
+  function renderAuditParams() {
+    if (!auditParamsEl || !auditConfig) return;
+    auditParamsEl.innerHTML = '';
+    var cfg = auditConfig;
+    function section(title) {
+      var el = document.createElement('div');
+      el.className = 'audit-param-section';
+      el.textContent = title;
+      auditParamsEl.appendChild(el);
+    }
+    function row(label, value, changed) {
+      var el = document.createElement('div');
+      el.className = 'audit-param-row' + (changed ? ' changed' : '');
+      var l = document.createElement('span');
+      l.textContent = label;
+      var v = document.createElement('code');
+      v.textContent = String(value);
+      el.appendChild(l);
+      el.appendChild(v);
+      auditParamsEl.appendChild(el);
+    }
+    section('运行参数');
+    row('指定人员', cfg.forced === null ? '无' : cfg.forced, false);
+    row('佳乐庆典', cfg.jiale ? '开启' : '关闭', false);
+    row('庆典常驻', cfg.jialeHold ? '开启' : '关闭', false);
+    row('抽取人数', cfg.count, false);
+    row('抽取方式', cfg.mode === 'all' ? '单次抽取' : '逐个抽取', false);
+    row('八人组', cfg.lg8 ? '开启' : '关闭', false);
+    row('流星模式', cfg.star === 'ind' ? '独立流星' : '单次流星', false);
+    row('滚动模式', cfg.view === 'h' ? '横向滚动' : (cfg.view === 'meteor' ? '流星' : '经典'), false);
+    section('权重明文（' + cfg.weights.length + ' 项）');
+    for (var i = 0; i < cfg.weights.length; i++) {
+      row('#' + (i + 1) + ' ' + (NAMES[i] ? NAMES[i].name : ''), cfg.weights[i], Number(cfg.weights[i]) !== 1);
+    }
+    if (auditIssues.length) {
+      section('参数异常');
+      for (var j = 0; j < auditIssues.length; j++) row('异常', auditIssues[j], true);
+    }
+  }
+
+  function renderAudit() {
+    var status = auditStatusText();
+    if (complianceDot) {
+      complianceDot.classList.toggle('pass', auditState === 'ok');
+      complianceDot.classList.toggle('warn', auditState === 'warn');
+      complianceDot.classList.toggle('fatal', auditState === 'fatal');
+      complianceDot.classList.remove('fail');
+      complianceDot.setAttribute('aria-label', '概率验真状态：' + status);
+      complianceDot.title = '概率验真：' + status;
+    }
+    if (hashCardState) {
+      hashCardState.className = 'hash-card-state ' + auditState;
+      hashCardState.textContent = status;
+    }
+    if (hashCardCode) hashCardCode.textContent = auditHash || '—';
+    if (auditStatusEl) {
+      auditStatusEl.className = 'audit-status ' + auditState;
+      auditStatusEl.textContent = status;
+    }
+    if (auditHashEl) auditHashEl.textContent = auditHash || '—';
+    if (auditParamsEl && !auditParamsEl.hidden) renderAuditParams();
+  }
+
+  function runAudit() {
+    auditTimer = null;
+    var trigger = auditPendingTrigger || '配置变更';
+    var oldHash = auditHash;
+    try {
+      var result = computeAudit();
+      auditConfig = result.cfg;
+      auditIssues = result.issues;
+      auditHash = result.hash;
+      auditState = result.state;
+      if (result.issues.length) {
+        __lgLog.warn('审计参数异常：' + result.issues.join('；'));
+      }
+      if (result.state !== 'fatal' && result.issues.length === 0) {
+        lastGoodAudit = { cfg: cloneAuditConfig(result.cfg), hash: result.hash };
+      }
+      __lgLog.audit(trigger, oldHash, auditHash, auditStatusText());
+      renderAudit();
+    } catch (err) {
+      auditState = 'fatal';
+      auditTimer = null;
+      __lgLog.error('审计重算失败', err);
+      __lgLog.audit(trigger, oldHash, '', '校验故障');
+      renderAudit();
+      __lgLog.toast('审计校验故障');
+    }
+  }
+
+  function refreshAudit(trigger, immediate) {
+    auditPendingTrigger = trigger || auditPendingTrigger || '配置变更';
+    if (!auditReady) return;
+    if (immediate) {
+      if (auditTimer) { clearTimeout(auditTimer); auditTimer = null; }
+      runAudit();
+      return;
+    }
+    if (auditTimer) clearTimeout(auditTimer);
+    auditTimer = setTimeout(runAudit, 180);
+  }
+
+  function markAuditTipSeen() {
+    try { localStorage.setItem(AUDIT_TIP_KEY, '1'); }
+    catch (e) { __lgLog.warn('写入指示灯说明标记失败', e); }
+  }
+  function hideAuditTip() {
+    if (!auditTip) return;
+    auditTip.hidden = true;
+    markAuditTipSeen();
+  }
+  var auditTipTries = 0;
+  function tryShowAuditTip() {
+    if (!auditTip) return;
+    var seen = false;
+    try { seen = localStorage.getItem(AUDIT_TIP_KEY) === '1'; }
+    catch (e) { __lgLog.warn('读取指示灯说明标记失败', e); seen = true; }
+    if (seen) return;
+    var guide = document.getElementById('v8Guide');
+    var ob = document.getElementById('onboarding');
+    var busy = (guide && !guide.hidden && guide.classList.contains('show')) ||
+               (ob && ob.style.display !== 'none');
+    if (busy) {
+      if (auditTipTries++ < 4) setTimeout(tryShowAuditTip, 2500);
+      return;
+    }
+    auditTip.hidden = false;
+    markAuditTipSeen(); // 只提示一次
+    setTimeout(function () { if (auditTip) auditTip.hidden = true; }, 9000);
+  }
+
+  function openHashCard() {
+    if (!hashCard) return;
+    refreshAudit('打开哈希卡片');
+    hashCard.classList.add('show');
+    hashCard.setAttribute('aria-hidden', 'false');
+  }
+  function closeHashCard() {
+    if (!hashCard) return;
+    hashCard.classList.remove('show');
+    hashCard.setAttribute('aria-hidden', 'true');
+  }
+  function toggleHashCard() {
+    if (!hashCard) return;
+    if (hashCard.classList.contains('show')) closeHashCard();
+    else openHashCard();
+  }
+
+  function openAuditPanel() {
+    if (!auditOverlay) return;
+    closeHashCard();
+    refreshAudit('打开审计面板', true);
+    if (auditParamsEl) auditParamsEl.hidden = true;
+    if (auditParamsToggle) {
+      auditParamsToggle.setAttribute('aria-expanded', 'false');
+      auditParamsToggle.textContent = '参数明文（点击展开）';
+    }
+    auditOverlay.classList.add('show');
+  }
+  function closeAuditPanel() {
+    if (auditOverlay) auditOverlay.classList.remove('show');
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); }
+    catch (err) { __lgLog.warn('复制命令不可用', err); }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  function copyAuditHash() {
+    var text = auditHash || '';
+    if (!text) { __lgLog.toast('暂无可复制的哈希'); return; }
+    function done() {
+      __lgLog.note('audit', '复制哈希指纹', text);
+      __lgLog.toast('哈希已复制');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function (err) {
+        __lgLog.warn('剪贴板 API 写入失败', err);
+        if (fallbackCopy(text)) done();
+        else __lgLog.toast('复制失败，请手动选择');
+      });
+    } else if (fallbackCopy(text)) {
+      done();
+    } else {
+      __lgLog.toast('复制失败，请手动选择');
+    }
+  }
+
+  function recoverAuditConfig(reason) {
+    if (!lastGoodAudit || auditRecovering) return false;
+    auditRecovering = true;
+    try {
+      var cfg = lastGoodAudit.cfg;
+      weights = cfg.weights.slice();
+      forcedName = cfg.forced;
+      jialeMode = !!cfg.jiale;
+      jialeHold = !!cfg.jialeHold;
+      document.body.classList.toggle('jiale-bg', jialeMode);
+      if (pickCount !== cfg.count) setPickCount(cfg.count);
+      pickMode = cfg.mode;
+      Array.prototype.forEach.call(countOpts.children, function (b) {
+        b.classList.toggle('active', parseInt(b.getAttribute('data-count'), 10) === pickCount);
+      });
+      Array.prototype.forEach.call(modeOpts.children, function (b) {
+        b.classList.toggle('active', b.getAttribute('data-mode') === pickMode);
+      });
+      var lg8El = document.getElementById('lg8Toggle');
+      if (lg8El && lg8El.checked !== cfg.lg8) {
+        lg8El.checked = cfg.lg8;
+        try { localStorage.setItem('lg_8mode_v1', cfg.lg8 ? '1' : '0'); }
+        catch (e) { __lgLog.warn('恢复八人组开关失败', e); }
+      }
+      buildProbPool();
+      saveWeights();
+      refreshCompliance('异常恢复');
+      try { window.dispatchEvent(new CustomEvent('lg-star', { detail: cfg.star })); }
+      catch (e2) { __lgLog.warn('恢复流星模式失败', e2); }
+      __lgLog.note('audit', '已恢复上次可用配置', reason ? String(reason) : '');
+      return true;
+    } catch (err) {
+      __lgLog.error('恢复上次可用配置失败', err);
+      return false;
+    } finally {
+      auditRecovering = false;
+    }
+  }
+
+  if (hashCard) hashCard.addEventListener('click', function (e) { e.stopPropagation(); });
+  if (hashCardCopy) hashCardCopy.addEventListener('click', function (e) { e.stopPropagation(); copyAuditHash(); });
+  if (hashCardOpen) hashCardOpen.addEventListener('click', function (e) { e.stopPropagation(); openAuditPanel(); });
+  if (auditOverlay) auditOverlay.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (e.target === auditOverlay) closeAuditPanel();
+  });
+  if (auditDialog) auditDialog.addEventListener('click', function (e) { e.stopPropagation(); });
+  if (auditCloseBtn) auditCloseBtn.addEventListener('click', function (e) { e.stopPropagation(); closeAuditPanel(); });
+  if (auditCopyBtn) auditCopyBtn.addEventListener('click', function (e) { e.stopPropagation(); copyAuditHash(); });
+  if (auditRefreshBtn) auditRefreshBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    refreshAudit('手动重新计算', true);
+    __lgLog.toast('已重新计算');
+  });
+  if (auditParamsToggle) auditParamsToggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!auditParamsEl) return;
+    var open = auditParamsEl.hidden;
+    auditParamsEl.hidden = !open;
+    auditParamsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    auditParamsToggle.textContent = open ? '参数明文（点击收起）' : '参数明文（点击展开）';
+    if (open) renderAuditParams();
+  });
+
+  var auditLg8El = document.getElementById('lg8Toggle');
+  if (auditLg8El) auditLg8El.addEventListener('change', function () { refreshAudit('八人组开关'); });
+  window.addEventListener('lg-star', function () { refreshAudit('流星模式'); });
+  window.addEventListener('lg-preset', function () { refreshAudit('滚动模式'); });
+
+  window.__lgAudit = {
+    refresh: refreshAudit,
+    recover: recoverAuditConfig,
+    open: openAuditPanel,
+    copy: copyAuditHash,
+    state: function () { return auditState; },
+    hash: function () { return auditHash; },
+    config: function () { return auditConfig; }
+  };
+
+  auditReady = true;
+  refreshAudit('初始化', true);
+  setTimeout(tryShowAuditTip, 1800);
 
   // ==========================================================
   // 美化设置：奶龙装饰彩蛋
@@ -6207,11 +7278,11 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   }
 
   function loadNylonPref() {
-    try { return localStorage.getItem(NAILONG_KEY) === '1'; } catch (e) { return false; }
+    try { return localStorage.getItem(NAILONG_KEY) === '1'; } catch (e) { __lgLog.warn('异常已捕获', e); return false; }
   }
 
   function saveNylonPref(show) {
-    try { localStorage.setItem(NAILONG_KEY, show ? '1' : '0'); } catch (e) { /* 忽略 */ }
+    try { localStorage.setItem(NAILONG_KEY, show ? '1' : '0'); } catch (e) { __lgLog.warn('异常已捕获', e); /* 忽略 */ }
   }
 
   nylonToggle.checked = loadNylonPref();
@@ -6226,11 +7297,11 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   var FLOW_BG_KEY = 'flow_bg_enabled';
 
   function loadFlowBgPref() {
-    try { return localStorage.getItem(FLOW_BG_KEY) !== '0'; } catch (e) { return true; }
+    try { return localStorage.getItem(FLOW_BG_KEY) !== '0'; } catch (e) { __lgLog.warn('异常已捕获', e); return true; }
   }
 
   function saveFlowBgPref(on) {
-    try { localStorage.setItem(FLOW_BG_KEY, on ? '1' : '0'); } catch (e) { /* 忽略 */ }
+    try { localStorage.setItem(FLOW_BG_KEY, on ? '1' : '0'); } catch (e) { __lgLog.warn('异常已捕获', e); /* 忽略 */ }
   }
 
   function applyFlowBg(on) {
@@ -6256,9 +7327,9 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   var lightRafActive = false;
 
   var prefersReduced = false;
-  try { prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  try { prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { __lgLog.warn('异常已捕获', e);}
   var isFinePointer = false;
-  try { isFinePointer = window.matchMedia('(pointer: fine)').matches; } catch (e) {}
+  try { isFinePointer = window.matchMedia('(pointer: fine)').matches; } catch (e) { __lgLog.warn('异常已捕获', e);}
 
   var rootEl = document.documentElement;
 
@@ -6297,7 +7368,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   'use strict';
   if (window.__lgPressLayer) return;
   window.__lgPressLayer = true;
-  try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) {}
+  try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) { __lgLog.warn('异常已捕获', e);}
 
   var BTN = '.top-btn,#resetBtn,#confirmBtn,#closeBtn,.sub-back-btn,#clearHistoryBtn,#resetWeightsBtn,#repairComplianceBtn,.dialog-btn,.pick-opt,.theme-opt,.ob-btn,#complianceDot,.suggest-item,.setting-link';
   var KNOB = '.switch,input[type="range"]';
@@ -6581,7 +7652,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   try {
     var saved = localStorage.getItem(KEY);
     if (VALID.indexOf(saved) >= 0) cur = saved;
-  } catch (e) {}
+  } catch (e) { __lgLog.warn('异常已捕获', e);}
   function apply() {
     if (cur === 'blue') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', cur);
@@ -6605,7 +7676,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       var t = this.getAttribute('data-theme');
       if (VALID.indexOf(t) >= 0 && t !== cur) {
         cur = t;
-        try { localStorage.setItem(KEY, cur); } catch (e2) {}
+        try { localStorage.setItem(KEY, cur); } catch (e2) { __lgLog.warn('异常已捕获', e2);}
         apply();
       }
       setOpen(false);
@@ -6682,10 +7753,10 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   var autoOn = false;
 
   function read(key) {
-    try { return localStorage.getItem(key); } catch (e) { return null; }
+    try { return localStorage.getItem(key); } catch (e) { __lgLog.warn('异常已捕获', e); return null; }
   }
   function store(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) {}
+    try { localStorage.setItem(key, value); } catch (e) { __lgLog.warn('异常已捕获', e);}
   }
   function validMode(value) {
     return value === 'auto' || value === 'on' || value === 'off';
@@ -6791,7 +7862,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         };
         osc.stop = function (t) {
           if (muted) return;
-          try { origStop(t); } catch (e) {}
+          try { origStop(t); } catch (e) { __lgLog.warn('异常已捕获', e);}
         };
         return osc;
       };
@@ -6838,7 +7909,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         note(n.f, t0 + n.d, n.g, n.dur);
         if (!compat()) note(n.f * 2, t0 + n.d, n.g * 0.28, n.dur * 0.7);  // 泛音层（兼容模式省略）
       }
-    } catch (e) { /* 音频不可用时静默忽略 */ }
+    } catch (e) { __lgLog.warn('异常已捕获', e); /* 音频不可用时静默忽略 */ }
   }
 
   /* 默认「叮咚」定格音（与主界面停止音效同款三音），供八人组揭晓复用 */
@@ -6870,7 +7941,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         osc.start(t);
         osc.stop(t + n.dur + 0.05);
       }
-    } catch (e) { /* 音频不可用时静默忽略 */ }
+    } catch (e) { __lgLog.warn('异常已捕获', e); /* 音频不可用时静默忽略 */ }
   }
 
   var area = document.getElementById('numberArea');
@@ -6882,7 +7953,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   var MSGS = ['✨今日这份运气已送达', '命运做出了它的抉择', '要不要再来碰碰手气？',
               '概率可是冷酷的噢', '哇，一个意想不到的数字', '运气只是一个有趣的巧合', '这个结果有点意思！'];
   var msgOn = true;
-  try { msgOn = localStorage.getItem(MSG_KEY) !== '0'; } catch (e) {}
+  try { msgOn = localStorage.getItem(MSG_KEY) !== '0'; } catch (e) { __lgLog.warn('异常已捕获', e);}
   var fm = document.createElement('div');
   fm.id = 'funMsg';
   fm.setAttribute('aria-hidden', 'true');
@@ -6892,7 +7963,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     msgToggle.checked = msgOn;
     msgToggle.addEventListener('change', function () {
       msgOn = !!msgToggle.checked;
-      try { localStorage.setItem(MSG_KEY, msgOn ? '1' : '0'); } catch (e) {}
+      try { localStorage.setItem(MSG_KEY, msgOn ? '1' : '0'); } catch (e) { __lgLog.warn('异常已捕获', e);}
       if (!msgOn) fm.classList.remove('show');
     });
   }
@@ -7047,7 +8118,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   try {
     var sv = parseFloat(localStorage.getItem(SPEED_KEY));
     if (isFinite(sv)) rate = Math.max(0.5, Math.min(2, sv));
-  } catch (e) {}
+  } catch (e) { __lgLog.warn('异常已捕获', e);}
   function T(ms) { return Math.max(1, Math.round(ms / rate)); }   // 时长换算：速率越大动画越快
 
   /* ---------- 佳乐庆典（body.jiale-bg）：八人组同样全程佳乐元素 ---------- */
@@ -7086,10 +8157,11 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   function enabled() { return !!(toggle && toggle.checked); }
   if (toggle) {
     var savedMode = false;
-    try { savedMode = localStorage.getItem(MODE_KEY) === '1'; } catch (e) {}
+    try { savedMode = localStorage.getItem(MODE_KEY) === '1'; } catch (e) { __lgLog.warn('异常已捕获', e);}
     toggle.checked = savedMode;
+    if (window.__lgAudit && window.__lgAudit.refresh) window.__lgAudit.refresh('八人组载入');
     toggle.addEventListener('change', function () {
-      try { localStorage.setItem(MODE_KEY, toggle.checked ? '1' : '0'); } catch (e) {}
+      try { localStorage.setItem(MODE_KEY, toggle.checked ? '1' : '0'); } catch (e) { __lgLog.warn('异常已捕获', e);}
     });
   }
 
@@ -7108,7 +8180,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         while ((m = re.exec(t))) names.push(m[1]);
         if (names.length) break;
       }
-    } catch (e) {}
+    } catch (e) { __lgLog.warn('异常已捕获', e);}
     if (!names.length) {
       var rows = document.querySelectorAll('#probPoolList .prob-name');
       for (var j = 0; j < rows.length; j++) names.push(rows[j].textContent.trim());
@@ -7132,12 +8204,12 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     // 其次兼容可能存在的旧 localStorage 数据
     try {
       if (validWeights(window.__lgProb, pool.length)) w = window.__lgProb;
-    } catch (e) {}
+    } catch (e) { __lgLog.warn('异常已捕获', e);}
     if (!w) {
       try {
         var arr = JSON.parse(localStorage.getItem('lottery_weights_v2'));
         if (validWeights(arr, pool.length)) w = arr;
-      } catch (e) {}
+      } catch (e) { __lgLog.warn('异常已捕获', e);}
     }
     WEIGHTS_CACHE = w;
     return w;
@@ -7487,14 +8559,14 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     var jl = jlNow();
     var fx = window.__lgFx;
     if (fx) {
-      try { fx.showMsg(); } catch (e) {}
-      if (jl) { try { fx.playJingle(); } catch (e) {} }
-      else { try { fx.playStopTone(); } catch (e) {} }
+      try { fx.showMsg(); } catch (e) { __lgLog.warn('异常已捕获', e);}
+      if (jl) { try { fx.playJingle(); } catch (e) { __lgLog.warn('异常已捕获', e);} }
+      else { try { fx.playStopTone(); } catch (e) { __lgLog.warn('异常已捕获', e);} }
       // 佳乐庆典：分三批抛出周佳乐元素（普通模式命中佳乐名仍单批触发）
       var bursts = jl ? 3 : (pendingName.indexOf('周佳乐') !== -1 ? 1 : 0);
       for (var b = 0; b < bursts; b++) {
         (function (k) {
-          setTimeout(function () { try { fx.spawnEgg(); } catch (e) {} }, k * T(240));
+          setTimeout(function () { try { fx.spawnEgg(); } catch (e) { __lgLog.warn('异常已捕获', e);} }, k * T(240));
         })(b);
       }
     }
@@ -7569,7 +8641,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       var v = parseFloat(rateEl.value);
       if (!isFinite(v)) return;
       rate = Math.max(0.5, Math.min(2, v));
-      try { localStorage.setItem(SPEED_KEY, String(rate)); } catch (e) {}
+      try { localStorage.setItem(SPEED_KEY, String(rate)); } catch (e) { __lgLog.warn('异常已捕获', e);}
       applyRate();
     });
   }
@@ -7659,7 +8731,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   try {
     var savedMode = localStorage.getItem(MODE_KEY);
     if (savedMode === 'h' || savedMode === 'meteor') mode = savedMode;
-  } catch (e) {}
+  } catch (e) { __lgLog.warn('异常已捕获', e);}
 
   /* 滚动速率不另加控件：直接复用顶部「速度」模块那根滑杆（应用刷新节拍 INTERVAL），
      换算成同一方向的倍率（越快 → 带子滚得越快）。只按比例缩放 ω（K×r²、C×r），
@@ -7813,20 +8885,20 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   }
   function setMode(m) {
     mode = (m === 'h' || m === 'meteor') ? m : 'c';
-    try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
+    try { localStorage.setItem(MODE_KEY, mode); } catch (e) { __lgLog.warn('异常已捕获', e);}
     for (var k in optEls) if (optEls[k]) optEls[k].className = 'pick-opt' + ((k === mode) ? ' active' : '');
     moveThumb();
     applyModeClass();
     syncStarRow();   // 仅流星预设：Star 模式行平滑拉伸展开 / 收起
     // 预设切换对外只发一个事件：流星预设自成模块，靠它启停（互不调用对方代码）
-    try { window.dispatchEvent(new CustomEvent('lg-preset', { detail: mode })); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('lg-preset', { detail: mode })); } catch (e) { __lgLog.warn('异常已捕获', e);}
     sync();   // 切到横向滚动时如果已经有一轮结果摆在上面：tick() 会把它们直接摆上轨道
   }
 
   /* ---------- Star 模式（Once / Ind）：挂在预设行下方，只有流星预设才展开 ---------- */
   var STAR_KEY = 'lg_star_mode_v1';
   var starMode = 'once';
-  try { if (localStorage.getItem(STAR_KEY) === 'ind') starMode = 'ind'; } catch (e) {}
+  try { if (localStorage.getItem(STAR_KEY) === 'ind') starMode = 'ind'; } catch (e) { __lgLog.warn('异常已捕获', e);}
   var starEls = {};
   function jlOnStar() {
     return document.body.classList.contains('jiale-bg') ||
@@ -7916,9 +8988,9 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   function setStarMode(v) {
     if (jlOnStar()) { syncStarJiale(); return; }   // 庆典期间模式由 Once 强制接管，不改偏好
     starMode = v === 'ind' ? 'ind' : 'once';
-    try { localStorage.setItem(STAR_KEY, starMode); } catch (e) {}
+    try { localStorage.setItem(STAR_KEY, starMode); } catch (e) { __lgLog.warn('异常已捕获', e);}
     syncStarJiale();
-    try { window.dispatchEvent(new CustomEvent('lg-star', { detail: starMode })); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('lg-star', { detail: starMode })); } catch (e) { __lgLog.warn('异常已捕获', e);}
   }
   /* ---------- 人数 / 抽取方式：同一套滑轨（白色指示块由脚本插到行首，按钮层级在其上） ---------- */
   function moveRailThumb(rowId, thumbId) {
@@ -8073,7 +9145,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         while ((m = re.exec(t))) names.push(m[1]);
         if (names.length) break;
       }
-    } catch (e) {}
+    } catch (e) { __lgLog.warn('异常已捕获', e);}
     if (!names.length) {
       var rows = document.querySelectorAll('#probPoolList .prob-name');
       for (var j = 0; j < rows.length; j++) names.push(rows[j].textContent.trim());
@@ -8456,12 +9528,12 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   try {
     var saved = localStorage.getItem(KEY);
     if (saved === 'meteor' || saved === 'h') mode = saved;
-  } catch (e) {}
+  } catch (e) { __lgLog.warn('异常已捕获', e);}
 
   /* Star 模式：once = 一次抽出整名（原有）；ind = 每点一次抽出一个字 */
   var STAR_KEY = 'lg_star_mode_v1';
   var starMode = 'once';
-  try { if (localStorage.getItem(STAR_KEY) === 'ind') starMode = 'ind'; } catch (e) {}
+  try { if (localStorage.getItem(STAR_KEY) === 'ind') starMode = 'ind'; } catch (e) { __lgLog.warn('异常已捕获', e);}
   /* 佳乐庆典：元素全是周佳乐，逐字点击失去意义 → 强制 Once（无论偏好里存的是什么）。
      场景在开始时快照庆典状态（应用会在停止瞬间清掉 jiale-bg），所以也要看 scene.jl。 */
   function starInd() { return starMode === 'ind' && !jialeOn() && !(scene && scene.jl); }
@@ -8596,7 +9668,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       if (!fx) return;
       if (jl) { if (fx.playJingle) fx.playJingle(); }
       else if (fx.playStopTone) fx.playStopTone();
-    } catch (e) { /* 音频不可用时静默忽略 */ }
+    } catch (e) { __lgLog.warn('异常已捕获', e); /* 音频不可用时静默忽略 */ }
   }
 
   /* ---------- 单人锁定：流星 / 八人组预设下压暗 2·3·4 并切回 1 人 ---------- */
@@ -8647,7 +9719,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         while ((m = re.exec(t))) out.push(m[1]);
         if (out.length) break;
       }
-    } catch (e) {}
+    } catch (e) { __lgLog.warn('异常已捕获', e);}
     if (!out.length) out = ['田寿康'];
     POOL = out;
     return out;
@@ -8929,7 +10001,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     d.setTransform(1, 0, 0, 1, 0, 0);
     d.clearRect(0, 0, bw, bh);
     d.imageSmoothingEnabled = true;
-    try { d.imageSmoothingQuality = 'high'; } catch (e) {}
+    try { d.imageSmoothingQuality = 'high'; } catch (e) { __lgLog.warn('异常已捕获', e);}
     if ('filter' in d) {
       /* 半径按 CSS px 折算到半分辨率画布，视觉浓度与全分辨率烘焙一致 */
       var rad = Math.max(8, Math.min(w, h) * 0.02) * dpr * k;
@@ -9401,8 +10473,8 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     api.set(on, true);                       // 常驻模式：背景转暖橙，抽完不清除
     toast(on ? '佳乐庆典已开启 · 再连点三次关闭' : '佳乐庆典已关闭');
     if (on && window.__lgFx) {               // 立刻兑现一批飘字，开没开一眼看得出来
-      try { window.__lgFx.spawnEgg(); } catch (err) {}
-      setTimeout(function () { try { window.__lgFx.spawnEgg(); } catch (err) {} }, 260);
+      try { window.__lgFx.spawnEgg(); } catch (err) { __lgLog.warn('异常已捕获', err);}
+      setTimeout(function () { try { window.__lgFx.spawnEgg(); } catch (err) { __lgLog.warn('异常已捕获', err);} }, 260);
     }
   }, true);
 })();
@@ -9455,7 +10527,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       if (ver) ver.textContent = 'V ' + String(j.version).replace(/^v/i, '');
       if (log) log.textContent = j.changelog ? String(j.changelog) : '本次更新包含体验与稳定性改进。';
       ov.classList.add('show');
-    }).catch(function () { /* 离线 / file:// 打开时静默跳过 */ });
+    }).catch(function (err) { __lgLog.warn('版本校验请求失败（离线或 file://）', err); });
   }
   var updateOverlay = $('updateOverlay');
   /* 遮罩与按钮都拦住冒泡：否则这次点击会落到应用的「点屏幕开始/停止」上 */
@@ -9533,11 +10605,11 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     if (perfInfo) { perfInfo.hidden = true; perfInfo.textContent = ''; }
   }
   var perfSaved = false;
-  try { perfSaved = localStorage.getItem(PERF_KEY) === '1'; } catch (e) {}
+  try { perfSaved = localStorage.getItem(PERF_KEY) === '1'; } catch (e) { __lgLog.warn('异常已捕获', e);}
   if (perfToggle) {
     perfToggle.checked = perfSaved;
     perfToggle.addEventListener('change', function () {
-      try { localStorage.setItem(PERF_KEY, perfToggle.checked ? '1' : '0'); } catch (e) {}
+      try { localStorage.setItem(PERF_KEY, perfToggle.checked ? '1' : '0'); } catch (e) { __lgLog.warn('异常已捕获', e);}
       if (perfToggle.checked) perfStart(); else perfStop();
     });
   }
@@ -9605,9 +10677,9 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     close();
     try {
       if (window.__lgApplyBootConfig) window.__lgApplyBootConfig(window.__lgBootDefaults);
-    } catch (err) { /* 忽略：单项失败不影响其余设置 */ }
+    } catch (err) { __lgLog.warn('异常已捕获', err); /* 忽略：单项失败不影响其余设置 */ }
     /* 恢复默认 = 回到首次打开状态：清掉已看标记，重载后重新走一遍引导 */
-    try { localStorage.removeItem('onboarding_done_v4'); } catch (err) {}
+    try { localStorage.removeItem('onboarding_done_v4'); } catch (err) { __lgLog.warn('异常已捕获', err);}
     toast('已恢复默认设置 · 即将重新进入引导');
     setTimeout(function () { location.reload(); }, 1100);
   });
@@ -9725,7 +10797,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
         while ((m = re.exec(t))) names.push(m[1]);
         if (names.length) break;
       }
-    } catch (e) {}
+    } catch (e) { __lgLog.warn('异常已捕获', e);}
     return names;
   }
 
@@ -9735,7 +10807,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     opened = true;
     cancelHold();
     hideConfirm();
-    try { sessionStorage.setItem('race_names_v1', JSON.stringify(extractNames())); } catch (e) {}
+    try { sessionStorage.setItem('race_names_v1', JSON.stringify(extractNames())); } catch (e) { __lgLog.warn('异常已捕获', e);}
     stage.classList.add('live');
     if (!frame.getAttribute('data-srcset')) {
       frame.src = 'race.html';
@@ -9756,7 +10828,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       finished = true;
       body.classList.remove('race-ready');
       stage.classList.remove('live');
-      try { frame.src = 'about:blank'; frame.removeAttribute('data-srcset'); } catch (e) {}
+      try { frame.src = 'about:blank'; frame.removeAttribute('data-srcset'); } catch (e) { __lgLog.warn('异常已捕获', e);}
       opened = false;
     }
     function onEnd(ev) {
@@ -9771,7 +10843,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
 
   /* ---------- 确认窗 ---------- */
   function showConfirm() {
-    if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }
+    if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) { __lgLog.warn('异常已捕获', e);} }
     confirmArmed = true;
     confirmEl.classList.add('show');
   }
@@ -9812,7 +10884,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       /* 第三下拦住主界面的展开面板逻辑，避免留在后台 */
       e.preventDefault();
       e.stopPropagation();
-      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (err) {} }
+      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (err) { __lgLog.warn('异常已捕获', err);} }
       openRace();
       return;
     }
@@ -9907,7 +10979,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
       var perfRuntime = window.__lgCompatRuntime;
       var compatMode = perfRuntime ? perfRuntime.getMode() : null;
       var perfTier = null;
-      try { perfTier = localStorage.getItem('lg_perf_tier_v1'); } catch (err) {}
+      try { perfTier = localStorage.getItem('lg_perf_tier_v1'); } catch (err) { __lgLog.warn('异常已捕获', err);}
       try {
         frame.contentWindow.postMessage({
           type: 'race-names',
@@ -9915,7 +10987,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
           compatMode: compatMode,
           perfTier: perfTier
         }, '*');
-      } catch (err) {}
+      } catch (err) { __lgLog.warn('异常已捕获', err);}
     }
     if (e.data.type === 'race-perf' && window.__lgCompatRuntime) {
       window.__lgCompatRuntime.setAutoResult(e.data);
@@ -9985,7 +11057,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     var active = opts.querySelector('.channel-opt.active');
     if (active) {
       try { active.focus({ preventScroll: true }); }
-      catch (err) { active.focus(); }
+      catch (err) { __lgLog.warn('异常已捕获', err); active.focus(); }
     }
   }
 
@@ -10006,7 +11078,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
     e.stopPropagation();
     if (!pending) return;
     var ch = pending;
-    try { localStorage.setItem(KEY, ch); } catch (err) {}
+    try { localStorage.setItem(KEY, ch); } catch (err) { __lgLog.warn('异常已捕获', err);}
     /* file:// 没有 /beta/ 静态目录：只记住选择，避免跳到不存在的路径 */
     if (location.protocol === 'file:') { hide(); sync(); return; }
     location.assign(target(ch));
@@ -10040,7 +11112,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   var itemTimers = [];
 
   function markSeen() {
-    try { localStorage.setItem(GUIDE_KEY, '1'); } catch (e) {}
+    try { localStorage.setItem(GUIDE_KEY, '1'); } catch (e) { __lgLog.warn('异常已捕获', e);}
   }
 
   function clearItemTimers() {
@@ -10116,7 +11188,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
 
   /* 调试指令 W8：清除已看标记并原样重播（重播结束会重新标记为已看） */
   function replayGuide() {
-    try { localStorage.removeItem(GUIDE_KEY); } catch (e) {}
+    try { localStorage.removeItem(GUIDE_KEY); } catch (e) { __lgLog.warn('异常已捕获', e);}
     clearItemTimers();
     opened = false;
     root.classList.remove('show');
@@ -10159,7 +11231,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   });
 
   var seen = false;
-  try { seen = localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { seen = true; }
+  try { seen = localStorage.getItem(GUIDE_KEY) === '1'; } catch (e) { __lgLog.warn('异常已捕获', e); seen = true; }
   if (seen) return;
 
   var ob = document.getElementById('onboarding');
@@ -10183,7 +11255,7 @@ html[data-theme="dark"] #devCommandRun:hover { background: rgba(255, 255, 255, .
   setTimeout(function () {
     if (!pending && getComputedStyle(ob).display === 'none') {
       pending = true;
-      try { mo.disconnect(); } catch (e) {}
+      try { mo.disconnect(); } catch (e) { __lgLog.warn('异常已捕获', e);}
       setTimeout(openGuide, 620);
     }
   }, 40000);
