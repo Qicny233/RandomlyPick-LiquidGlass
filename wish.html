@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>祈愿 · 特殊模式</title>
+  <link rel="stylesheet" href="wish_assets/vendor/bootstrap.min.css" />
+  <link rel="stylesheet" href="wish_assets/vendor/carousel.min.css" />
+  <link rel="stylesheet" href="wish_assets/css/style.css" />
+</head>
+<body>
+  <!-- ============ 卡池页 ============ -->
+  <div id="bannersView" class="wrapper banners">
+    <div class="giws-banners-container">
+      <div class="heading">
+        <div class="select-banner" id="selectBanner" role="tablist" aria-label="卡池选择">
+          <button class="banner-button selected" type="button" role="tab" data-banner="moment-of-bloom-2">角色祈愿</button>
+        </div>
+        <div class="close-window" id="closeWindow" role="button" tabindex="0" aria-label="退出特殊模式"></div>
+      </div>
+
+      <div class="carousel-container">
+        <div class="carousel carousel-slider">
+          <div class="slider-wrapper axis-horizontal">
+            <ul class="slider animated" id="slider">
+              <li class="slide slide-character">
+                <div class="wish-counter" data-count-for="moment-of-bloom-2">0</div>
+                <div class="slide-glyph" aria-hidden="true"></div>
+                <div class="slide-title"><span>角色活动祈愿</span></div>
+                <div class="slide-note">CHARACTER EVENT WISH</div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-container">
+        <div class="wish-container">
+          <div class="wish-button" id="wishBtn" role="button" tabindex="0">Wish</div>
+          <div class="wish-button" id="wishBtn4" role="button" tabindex="0">Wish x4</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 抽卡动画页 ============ -->
+  <div id="wishView" hidden>
+    <button class="skip-button" id="skipBtn" type="button">Skip</button>
+    <video id="wishVideo" playsinline autoplay muted></video>
+  </div>
+
+  <!-- ============ 结果页 ============ -->
+  <div id="resultsView" class="wish-results" hidden>
+    <button class="close-button" id="resultsClose" type="button" aria-label="返回卡池"></button>
+    <div class="results-stage" id="resultsRow"></div>
+  </div>
+
+  <!-- ============ 设置（左下角） ============ -->
+  <button class="settings-btn" id="settingsBtn" type="button" aria-label="设置" aria-expanded="false" aria-controls="settingsPanel">
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path fill="currentColor" d="M19.4 13a7.9 7.9 0 0 0 .05-1 7.9 7.9 0 0 0-.05-1l2-1.6a.5.5 0 0 0 .12-.63l-1.9-3.3a.5.5 0 0 0-.6-.22l-2.36.95a7.3 7.3 0 0 0-1.73-1l-.36-2.5a.5.5 0 0 0-.5-.42h-3.8a.5.5 0 0 0-.5.42l-.36 2.5a7.3 7.3 0 0 0-1.73 1l-2.36-.95a.5.5 0 0 0-.6.22l-1.9 3.3a.5.5 0 0 0 .12.63l2 1.6a7.9 7.9 0 0 0 0 2l-2 1.6a.5.5 0 0 0-.12.63l1.9 3.3a.5.5 0 0 0 .6.22l2.36-.95a7.3 7.3 0 0 0 1.73 1l.36 2.5a.5.5 0 0 0 .5.42h3.8a.5.5 0 0 0 .5-.42l.36-2.5a7.3 7.3 0 0 0 1.73-1l2.36.95a.5.5 0 0 0 .6-.22l1.9-3.3a.5.5 0 0 0-.12-.63l-2-1.6ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/>
+    </svg>
+  </button>
+  <div class="settings-panel" id="settingsPanel" hidden>
+    <div class="settings-head">
+      <span>设置</span>
+      <button class="settings-close" id="settingsClose" type="button" aria-label="关闭设置">×</button>
+    </div>
+    <div class="settings-section">
+      <div class="settings-row">
+        <div class="settings-label"><span>一键静音</span><small>关闭祈愿页全部音效</small></div>
+        <button class="toggle" id="muteToggle" type="button" role="switch" aria-checked="false"><span class="toggle-knob"></span></button>
+      </div>
+      <div class="settings-row settings-row-slider">
+        <div class="settings-label"><span>音量</span><small id="volumeText">80%</small></div>
+        <input class="settings-range" id="volumeRange" type="range" min="0" max="100" step="1" value="80" aria-label="音量" />
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-row">
+        <div class="settings-label"><span>音效拓展</span><small>抽卡动画与结果揭示音效 · 默认不加载</small></div>
+        <button class="toggle" id="extendedToggle" type="button" role="switch" aria-checked="false"><span class="toggle-knob"></span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="giws-toast" id="giwsToast" aria-hidden="true"></div>
+
+  <script src="wish_assets/js/wish.js"></script>
+</body>
+</html>

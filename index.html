@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>随机人员生成器 V8.1</title>
+<title>随机人员生成器 V9.1</title>
 <link rel="icon" href="data:,">
 <script>
 /* 全局日志 / 异常分级 / 短暂提示。尽早加载，后续所有模块统一写入。 */
@@ -4369,7 +4369,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   <div id="onboarding" role="dialog" aria-modal="true" aria-label="首次使用引导">
     <div class="ob-card glass mat-modal">
       <div class="ob-top">
-        <div class="ob-brand">随机人员生成器 <b>V8.1</b></div>
+        <div class="ob-brand">随机人员生成器 <b>V9.1</b></div>
         <div class="ob-dots" role="tablist" aria-label="引导页切换">
           <button class="ob-dot on" type="button" data-ob-page="0" aria-label="第 1 页：欢迎"></button>
           <button class="ob-dot" type="button" data-ob-page="1" aria-label="第 2 页：默认设置"></button>
@@ -4751,7 +4751,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   </script>
 
   <div class="title-area" id="titleArea">
-    <div id="title">随机人员生成器 V8.1</div>
+    <div id="title">随机人员生成器 V<span class="pro-gold">9.1</span></div>
     <button id="complianceDot" type="button" aria-label="概率验真状态指示灯"></button>
     <button id="complianceBtn" class="top-btn" type="button">合规校验通过</button>
     <button id="auditPanelBtn" class="top-btn" type="button">哈希审计面板</button>
@@ -4967,8 +4967,12 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
           <span>关于此程序</span>
         </div>
         <div id="aboutContent">
-      版本号：V8.1
+      版本号：V9.1
       更新日志：
+      V9.1
+      · 原神祈愿特殊模式：角色祈愿卡池、四连抽与纯排版卡面
+      · 周佳乐固定五星，其余元素统一四星
+      · 祈愿页左下角新增设置：一键静音、音量调节与音效拓展（扩展音效默认不加载）
       V8.1
       · 新增本地合规审计验真：实时计算概率参数 SHA-256 哈希，哈希变化即代表配置被修改
       · 概率验真指示灯升级：绿=正常、橙=参数异常、红=校验故障；单击展开合规校验与审计面板入口
@@ -5228,7 +5232,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   <div id="updateOverlay" class="scrim">
     <div id="updateDialog" class="glass mat-modal" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
       <div id="updateTitle" class="update-title">检测到新版本</div>
-      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V8.1</span></div>
+      <div class="update-ver">线上版本 <b id="updateVer">—</b> · 当前 <span id="updateLocalVer">V9.1</span></div>
       <div id="updateLog" class="update-log"></div>
       <div class="confirm-btns">
         <button id="updateOkBtn" class="dialog-btn" type="button">确认</button>
@@ -5238,7 +5242,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
 
   <!-- 左下角常驻：版本 + 版权（不可关闭）；性能信息由设置项控制 -->
   <div id="appFooter" aria-hidden="true">
-    <span class="af-ver" id="footerVer">V 8.1</span>
+    <span class="af-ver" id="footerVer">V 9.1</span>
     <span class="af-sep">|</span>
     <span class="af-copy">Qicny © All Rights Reserved</span>
     <span id="perfInfo" hidden></span>
@@ -5408,6 +5412,36 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   function jialeItem() {
     return JIALE_ITEMS[Math.floor(Math.random() * JIALE_ITEMS.length)];
   }
+
+  /* ---------- 特殊模式「原神抽卡」的抽取桥 ----------
+     只复用现有 randomName/权重/佳乐彩蛋，抽取概率逻辑零改动。
+     星级仅用于卡面动画与展示：周佳乐固定五星，其余元素一律四星。 */
+  window.__lgWishDraw = function (count, jiale) {
+    count = Math.max(1, Math.min(4, parseInt(count, 10) || 1));
+    /* 佳乐庆典：必须命中周佳乐，四连抽就是四个周佳乐 */
+    if (jiale) {
+      var all = [];
+      for (var q = 0; q < count; q++) {
+        all.push({ name: '周佳乐', rating: 5 });
+        addHistory('周佳乐');
+      }
+      return all;
+    }
+    var picked = [];
+    for (var k = 0; k < count; k++) {
+      var name;
+      for (var tries = 0; tries < 48; tries++) {
+        name = jialeMode ? jialeItem() : randomName();
+        if (picked.indexOf(name) === -1) break;
+      }
+      picked.push(name);
+    }
+    for (var j = 0; j < picked.length; j++) addHistory(picked[j]);
+    return picked.map(function (name) {
+      /* 周佳乐固定五星，其余元素一律四星（不做权重分级） */
+      return { name: name, rating: name === '周佳乐' ? 5 : 4 };
+    });
+  };
 
   /* 佳乐庆典总开关：长按「周佳乐」行 = 一次性彩蛋；顶部三连击 = 常驻模式（jialeHold）。
      常驻模式下抽完不清除（stop() 里那条一次性清除会跳过），背景保持暖橙渐变。 */
@@ -10352,8 +10386,8 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
    ========================================================== */
 (function () {
   'use strict';
-  var APP_VERSION = '8.1';  // 本地版本（与仓库根目录 version.json 对比）
-  var DISPLAY_VERSION = 'V8.1';
+  var APP_VERSION = '9.1';  // 本地版本（与仓库根目录 version.json 对比）
+  var DISPLAY_VERSION = 'V9.1';
   var PERF_KEY = 'lottery_perf_v1';
 
   function $(id) { return document.getElementById(id); }
@@ -10554,10 +10588,10 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
 </script>
 
 <!-- ============================================================
-     隐藏 3D 赛车抽取入口（additive，不改动任何原有逻辑）
+     特殊模式入口（additive，不改动任何原有逻辑）
+     快捷：连续点击三次右上角「人数及抽取」→ 模式选择窗（原神 / 赛车）
      桌面：鼠标长按空白 3 秒（无提示）→ 确认窗 → 单击「进入」→ 赛车页推入
-     触屏：五指在屏幕右半部从右向左滑 → 直接丝滑推入（不弹确认）
-     快捷：连续点击三次右上角「人数及抽取」→ 直接进入
+     原神模式：界面复刻自 genshin-impact-wish-simulator，抽取仍走主页面权重
      ============================================================ -->
 <style>
   #raceStage{
@@ -10593,10 +10627,195 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   #raceEnter{
     color:var(--ink-strong); font-weight:600;
   }
+
+  /* ---------- 原神抽卡特殊模式：与赛车同款的整页推入 ---------- */
+  #wishStage{
+    position:fixed; inset:0; z-index:100000;
+    transform:translateX(100%);
+    visibility:hidden; pointer-events:none;
+    background:#000; overflow:hidden;
+    box-shadow:-20px 0 70px rgba(25,35,55,.20);
+  }
+  #wishStage.live{ visibility:visible; pointer-events:auto; }
+  #wishFrame{ width:100%; height:100%; border:0; display:block; background:#000; }
+  body.wish-ready{ transition:transform .64s cubic-bezier(.22,.85,.3,1); will-change:transform; }
+  body.wish-open{ transform:translateX(-100%); }
+  body.wish-open *{ animation-play-state:paused !important; }
+
+  /* ---------- 模式选择窗：原神 / 赛车 ---------- */
+  #modePicker{ z-index:100004; display:flex; align-items:center; justify-content:center; }
+  #modePickerDialog{
+    width:min(760px, 92vw);
+    padding:20px 22px 16px;
+    text-align:center;
+    opacity:0; transform:translateY(8px) scale(.965); filter:blur(8px);
+    transition: opacity .22s var(--ease-out), transform .28s var(--spring-soft), filter .28s var(--spring-soft);
+    user-select:none; -webkit-user-select:none;
+  }
+  #modePicker.show #modePickerDialog{ opacity:1; transform:none; filter:none; }
+  .mode-picker-title{ font-size:17px; font-weight:600; letter-spacing:.5px; color:var(--ink-strong); }
+  .mode-picker-sub{ margin-top:5px; font-size:11.5px; letter-spacing:.6px; color:var(--ink-3); }
+  .mode-cards{ display:flex; gap:14px; margin-top:16px; }
+  .mode-card{
+    position:relative; flex:1 1 0; aspect-ratio:4 / 3;
+    border:0; padding:0; border-radius:16px; overflow:hidden;
+    cursor:pointer; isolation:isolate; background:#0b1224;
+    box-shadow:0 10px 26px rgba(15,22,38,.22);
+    transition: transform .3s var(--spring-soft), box-shadow .3s var(--ease-out);
+  }
+  .mode-art{ position:absolute; inset:0; z-index:0; display:block; width:100%; height:100%; }
+  .mode-card:hover{ transform:translateY(-3px) scale(1.012); box-shadow:0 16px 34px rgba(15,22,38,.28); }
+  .mode-card:active{ transform:scale(.985); }
+  .mode-card::after{
+    content:''; position:absolute; inset:0; z-index:1; pointer-events:none;
+    background:
+      linear-gradient(180deg, rgba(8,12,20,.58) 0%, rgba(8,12,20,0) 42%),
+      linear-gradient(0deg, rgba(8,12,20,.55) 0%, rgba(8,12,20,0) 42%);
+  }
+  .mode-card-label{ position:absolute; left:14px; top:12px; right:14px; z-index:2; text-align:left; color:#fff; }
+  .mode-card-label b{ display:block; font-size:16px; font-weight:600; letter-spacing:.5px; text-shadow:0 1px 10px rgba(0,0,0,.75), 0 1px 2px rgba(0,0,0,.55); }
+  .mode-card-label i{ display:block; margin-top:3px; font-size:11px; font-style:normal; letter-spacing:1px; color:rgba(255,255,255,.82); text-shadow:0 1px 6px rgba(0,0,0,.6); }
+  /* 卡面为内联 SVG 图案：不依赖任何截图 / 立绘，清晰度随分辨率自适应 */
+  #modePickerClose{ margin-top:14px; min-width:96px; }
+  @media (max-width:560px){
+    #modePickerDialog{ padding:16px 14px 12px; }
+    .mode-cards{ gap:10px; }
+    .mode-card-label b{ font-size:14px; }
+  }
 </style>
 
 <div id="raceStage" aria-hidden="true">
   <iframe id="raceFrame" title="3D 赛车抽取" src="about:blank" loading="lazy"></iframe>
+</div>
+
+<div id="wishStage" aria-hidden="true">
+  <iframe id="wishFrame" title="原神抽卡特殊模式" src="about:blank" loading="lazy"></iframe>
+</div>
+
+<div id="modePicker" class="scrim" aria-hidden="true">
+  <div id="modePickerDialog" class="glass mat-modal">
+    <div class="mode-picker-title">特殊模式</div>
+    <div class="mode-picker-sub">选择要进入的模式</div>
+    <div class="mode-cards">
+      <button id="modeCardGenshin" class="mode-card" type="button" data-mode="genshin">
+        <svg class="mode-art" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="mpGSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#0c1733"/>
+              <stop offset=".58" stop-color="#1d3163"/>
+              <stop offset="1" stop-color="#3d5c99"/>
+            </linearGradient>
+            <radialGradient id="mpGGlow" cx="50%" cy="38%" r="52%">
+              <stop offset="0" stop-color="#ffe9b0" stop-opacity=".9"/>
+              <stop offset=".5" stop-color="#ffd977" stop-opacity=".22"/>
+              <stop offset="1" stop-color="#ffd977" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="mpGStar" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#fff6d8"/>
+              <stop offset="1" stop-color="#ffc84f"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="300" fill="url(#mpGSky)"/>
+          <circle cx="200" cy="112" r="130" fill="url(#mpGGlow)"/>
+          <g fill="none" stroke="#bcd0ff" stroke-opacity=".38" stroke-width="1">
+            <path d="M62 214 L108 168 L150 196 L196 130 L246 168 L300 118 L344 156"/>
+            <path d="M108 168 L96 108"/>
+            <path d="M246 168 L262 224"/>
+          </g>
+          <g fill="#dbe6ff">
+            <circle cx="62" cy="214" r="2.2" opacity=".8"/>
+            <circle cx="108" cy="168" r="3" opacity=".9"/>
+            <circle cx="150" cy="196" r="2" opacity=".7"/>
+            <circle cx="196" cy="130" r="2.6" opacity=".85"/>
+            <circle cx="246" cy="168" r="2.2" opacity=".8"/>
+            <circle cx="300" cy="118" r="3" opacity=".9"/>
+            <circle cx="344" cy="156" r="2" opacity=".7"/>
+            <circle cx="96" cy="108" r="1.8" opacity=".6"/>
+            <circle cx="262" cy="224" r="1.8" opacity=".6"/>
+          </g>
+          <g fill="#ffffff" opacity=".7">
+            <circle cx="44" cy="52" r="1.2"/><circle cx="92" cy="34" r="1"/>
+            <circle cx="148" cy="66" r="1.3"/><circle cx="318" cy="42" r="1.1"/>
+            <circle cx="362" cy="86" r="1.4"/><circle cx="28" cy="120" r="1"/>
+            <circle cx="376" cy="214" r="1.2"/><circle cx="132" cy="240" r="1"/>
+          </g>
+          <g transform="translate(200 118)">
+            <path d="M0 -46 C4 -14 14 -4 46 0 C14 4 4 14 0 46 C-4 14 -14 4 -46 0 C-14 -4 -4 -14 0 -46Z" fill="url(#mpGStar)"/>
+            <circle cx="0" cy="0" r="7" fill="#fff8dd"/>
+            <path d="M0 -72 C2 -22 22 -2 72 0 C22 2 2 22 0 72 C-2 22 -22 2 -72 0 C-22 -2 -2 -22 0 -72Z" fill="none" stroke="#ffe2a0" stroke-opacity=".35"/>
+          </g>
+          <g fill="none" stroke="#ffe2a0" stroke-opacity=".14">
+            <ellipse cx="200" cy="118" rx="138" ry="52"/>
+            <ellipse cx="200" cy="118" rx="176" ry="70"/>
+          </g>
+        </svg>
+        <span class="mode-card-label"><b>原神模式</b><i>祈愿抽卡</i></span>
+      </button>
+      <button id="modeCardRace" class="mode-card" type="button" data-mode="race">
+        <svg class="mode-art" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="mpRSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#1a1330"/>
+              <stop offset=".55" stop-color="#4a1f35"/>
+              <stop offset="1" stop-color="#c25a2e"/>
+            </linearGradient>
+            <radialGradient id="mpRSun" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stop-color="#ffd9a0" stop-opacity=".9"/>
+              <stop offset="1" stop-color="#ff8c42" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="mpRRoad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#241a2a"/>
+              <stop offset="1" stop-color="#0d0a12"/>
+            </linearGradient>
+            <pattern id="mpRCheck" width="16" height="16" patternUnits="userSpaceOnUse">
+              <rect width="8" height="8" fill="#f4f1ea"/>
+              <rect x="8" width="8" height="8" fill="#15121a"/>
+              <rect y="8" width="8" height="8" fill="#15121a"/>
+              <rect x="8" y="8" width="8" height="8" fill="#f4f1ea"/>
+            </pattern>
+          </defs>
+          <rect width="400" height="300" fill="url(#mpRSky)"/>
+          <circle cx="200" cy="132" r="92" fill="url(#mpRSun)"/>
+          <g fill="#141021" opacity=".92">
+            <rect x="0" y="86" width="46" height="120"/>
+            <rect x="52" y="108" width="34" height="98"/>
+            <rect x="92" y="70" width="28" height="136"/>
+            <rect x="286" y="92" width="36" height="114"/>
+            <rect x="328" y="66" width="44" height="140"/>
+            <rect x="376" y="102" width="30" height="104"/>
+          </g>
+          <g fill="#ffd9a0" opacity=".5">
+            <rect x="10" y="100" width="5" height="5"/><rect x="28" y="124" width="5" height="5"/>
+            <rect x="60" y="120" width="4" height="4"/><rect x="72" y="150" width="4" height="4"/>
+            <rect x="100" y="90" width="4" height="4"/><rect x="104" y="120" width="4" height="4"/>
+            <rect x="296" y="112" width="5" height="5"/><rect x="312" y="140" width="4" height="4"/>
+            <rect x="340" y="86" width="5" height="5"/><rect x="352" y="126" width="4" height="4"/>
+            <rect x="384" y="120" width="4" height="4"/>
+          </g>
+          <rect x="0" y="204" width="400" height="2" fill="#ffb46a" opacity=".35"/>
+          <path d="M0 300 L152 204 L248 204 L400 300 Z" fill="url(#mpRRoad)"/>
+          <g fill="none" stroke="#ffb46a" stroke-opacity=".55">
+            <path d="M152 204 L0 300" stroke-width="3"/>
+            <path d="M248 204 L400 300" stroke-width="3"/>
+            <path d="M176 212 L120 300" stroke-width="2" stroke-dasharray="10 9"/>
+            <path d="M224 212 L280 300" stroke-width="2" stroke-dasharray="10 9"/>
+          </g>
+          <path d="M150 258 L250 258 L262 278 L138 278 Z" fill="url(#mpRCheck)" opacity=".92"/>
+          <g fill="none" stroke="#9fe8ff" stroke-opacity=".55" stroke-width="2">
+            <path d="M120 204 L120 150 L280 150 L280 204"/>
+          </g>
+          <g stroke="#ffe6c4" stroke-opacity=".5" stroke-width="2">
+            <path d="M40 40 L110 40"/>
+            <path d="M18 58 L74 58"/>
+            <path d="M292 48 L360 48"/>
+            <path d="M322 66 L390 66"/>
+          </g>
+        </svg>
+        <span class="mode-card-label"><b>赛车模式</b><i>3D 极速抽取</i></span>
+      </button>
+    </div>
+    <button id="modePickerClose" class="dialog-btn" type="button">取消</button>
+  </div>
 </div>
 
 <div id="raceConfirm" class="scrim">
@@ -10617,22 +10836,21 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   window.__raceGate = true;
 
   var HOLD_MS = 3000;
-  var SWIPE_FINGERS = 5;
-  var SWIPE_X = 70;
   var MOVE_TOL = 12;
 
   var body = document.body;
   var stage = document.getElementById('raceStage');
   var frame = document.getElementById('raceFrame');
   var confirmEl = document.getElementById('raceConfirm');
+  var wishStage = document.getElementById('wishStage');
+  var wishFrame = document.getElementById('wishFrame');
+  var modePicker = document.getElementById('modePicker');
 
   var opened = false;
+  var wishOpened = false;
   var holding = false;
   var holdTimer = null;
   var sx = 0, sy = 0;
-
-  /* 触屏五指状态 */
-  var t5 = false, tFired = false, tStartX = 0, tStartY = 0;
 
   var INTERACTIVE = 'button,input,label,a,select,textarea,.scrim,.overlay,.top-btn,#pickPop,#speedPop,#themePop,#resetBtn,#onboarding,.pick-opt,.theme-opt,.setting-link,.suggest-item';
 
@@ -10649,7 +10867,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     return !!(t && t.closest && t.closest(INTERACTIVE));
   }
   function gateBlocked() {
-    return opened || onboardingVisible() || anyScrim();
+    return opened || wishOpened || onboardingVisible() || anyScrim();
   }
 
   /* 与主应用同源的名单读取：从内联 var NAMES 提取 name */
@@ -10670,7 +10888,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
 
   /* ---------- 推屏转场 ---------- */
   function openRace() {
-    if (opened) return;
+    if (opened || wishOpened) return;
     opened = true;
     cancelHold();
     hideConfirm();
@@ -10708,6 +10926,72 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     setTimeout(done, 820);   // 兜底，防止 transitionend 被打断
   }
 
+  /* ---------- 原神抽卡：同款推屏转场 ---------- */
+  function openWish() {
+    if (opened || wishOpened) return;
+    wishOpened = true;
+    cancelHold();
+    hideConfirm();
+    wishStage.classList.add('live');
+    if (!wishFrame.getAttribute('data-srcset')) {
+      wishFrame.src = 'wish.html';
+      wishFrame.setAttribute('data-srcset', '1');
+    }
+    body.classList.add('wish-ready');
+    void body.offsetWidth;
+    body.classList.add('wish-open');
+  }
+
+  function closeWish() {
+    if (!wishOpened) return;
+    body.classList.remove('wish-open');
+    var finished = false;
+    function done() {
+      if (finished) return;
+      finished = true;
+      body.classList.remove('wish-ready');
+      wishStage.classList.remove('live');
+      try { wishFrame.src = 'about:blank'; wishFrame.removeAttribute('data-srcset'); } catch (e) { __lgLog.warn('异常已捕获', e);}
+      wishOpened = false;
+    }
+    function onEnd(ev) {
+      if (ev.propertyName === 'transform' && ev.target === body) {
+        body.removeEventListener('transitionend', onEnd);
+        done();
+      }
+    }
+    body.addEventListener('transitionend', onEnd);
+    setTimeout(done, 820);
+  }
+
+  /* ---------- 模式选择窗 ---------- */
+  function openModePicker() {
+    if (opened || wishOpened || onboardingVisible()) return;
+    if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) { __lgLog.warn('异常已捕获', e);} }
+    modePicker.classList.add('show');
+  }
+  function closeModePicker() {
+    modePicker.classList.remove('show');
+  }
+  modePicker.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (e.target === modePicker) closeModePicker();
+  });
+  document.getElementById('modePickerClose').addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeModePicker();
+  });
+  document.getElementById('modeCardGenshin').addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeModePicker();
+    openWish();
+  });
+  document.getElementById('modeCardRace').addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeModePicker();
+    openRace();
+  });
+
   /* ---------- 确认窗 ---------- */
   function showConfirm() {
     if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) { __lgLog.warn('异常已捕获', e);} }
@@ -10739,7 +11023,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   }, false);
   /* 长按 5 秒弹窗时用户手指仍按着：松手那一下 click 的命中目标可能是弹窗的祖先（body），
      不会经过 confirmEl。在弹窗出现后、用户产生新的 pointerdown 之前，吞掉这一次 click。 */
-  /* ---------- 快捷入口：连续点击三次「人数及抽取」直接进赛车 ---------- */
+  /* ---------- 快捷入口：连续点击三次「人数及抽取」→ 特殊模式选择窗 ---------- */
   var pickTaps = 0, pickTapTimer = null;
   document.addEventListener('click', function (e) {
     var btn = e.target && e.target.closest ? e.target.closest('#pickBtn') : null;
@@ -10751,8 +11035,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       /* 第三下拦住主界面的展开面板逻辑，避免留在后台 */
       e.preventDefault();
       e.stopPropagation();
-      if (navigator.vibrate) { try { navigator.vibrate(18); } catch (err) { __lgLog.warn('异常已捕获', err);} }
-      openRace();
+      openModePicker();
       return;
     }
     pickTapTimer = setTimeout(function () { pickTaps = 0; }, 900);
@@ -10803,40 +11086,6 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
   document.addEventListener('pointercancel', cancelHold, true);
   window.addEventListener('blur', cancelHold);
 
-  /* ---------- 触屏：五指从右向左滑，直接丝滑进入 ---------- */
-  function avgTouch(e) {
-    var x = 0, y = 0, n = e.touches.length;
-    for (var i = 0; i < n; i++) { x += e.touches[i].clientX; y += e.touches[i].clientY; }
-    return { x: x / n, y: y / n };
-  }
-  document.addEventListener('touchstart', function (e) {
-    if (gateBlocked()) { t5 = false; return; }
-    if (e.touches.length === SWIPE_FINGERS) {
-      var p = avgTouch(e);
-      if (p.x > window.innerWidth * 0.45) {   // 起手在屏幕右半部
-        t5 = true; tFired = false;
-        tStartX = p.x; tStartY = p.y;
-      } else { t5 = false; }
-    } else { t5 = false; }
-  }, { passive: true, capture: true });
-  document.addEventListener('touchmove', function (e) {
-    if (!t5) return;
-    if (e.touches.length !== SWIPE_FINGERS) { t5 = false; return; }
-    var p = avgTouch(e);
-    var dx = tStartX - p.x, dy = p.y - tStartY;
-    if (Math.abs(dx) > 10 && Math.abs(dx) >= Math.abs(dy)) e.preventDefault();  // 水平主导时阻止页面默认手势
-    if (dx > SWIPE_X && Math.abs(dx) > Math.abs(dy) && !tFired) {
-      tFired = true;
-      e.preventDefault();
-      openRace();
-    }
-  }, { passive: false, capture: true });
-  function touchEnd(e) {
-    if (e.touches.length < SWIPE_FINGERS) t5 = false;
-  }
-  document.addEventListener('touchend', touchEnd, { passive: true, capture: true });
-  document.addEventListener('touchcancel', touchEnd, { passive: true, capture: true });
-
   /* ---------- 赛车页通信：加载后索取名单、返回 ---------- */
   window.addEventListener('message', function (e) {
     /* file:// 下若主页面 origin 是 "file://"、iframe 是 "null"，严格比对 origin 会丢消息；
@@ -10861,8 +11110,45 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     }
     if (e.data.type === 'race-close') closeRace();
   });
+
+  /* ---------- 原神页通信：页面只负责演出，抽取结果由主页面按现有权重生成 ---------- */
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.source !== wishFrame.contentWindow) return;
+    if (e.data.type === 'wish-draw') {
+      var items = [];
+      try {
+        if (typeof window.__lgWishDraw === 'function') {
+          items = window.__lgWishDraw(e.data.count, !!e.data.jiale);
+        } else {
+          __lgLog.error('原神模式抽取桥不可用', new Error('__lgWishDraw missing'));
+        }
+      } catch (err) {
+        __lgLog.error('原神模式抽取异常', err);
+      }
+      try {
+        wishFrame.contentWindow.postMessage({ type: 'wish-result', items: items }, '*');
+      } catch (err) { __lgLog.warn('异常已捕获', err);}
+    }
+    /* 原神页加载后同步一次庆典状态；页内三连点也会回传 */
+    if (e.data.type === 'wish-hello') {
+      try {
+        wishFrame.contentWindow.postMessage({
+          type: 'wish-init',
+          jiale: !!(window.__lgJiale && window.__lgJiale.on())
+        }, '*');
+      } catch (err) { __lgLog.warn('异常已捕获', err);}
+    }
+    if (e.data.type === 'wish-jiale' && window.__lgJiale) {
+      try { window.__lgJiale.set(!!e.data.on, true); } catch (err) { __lgLog.warn('异常已捕获', err);}
+    }
+    if (e.data.type === 'wish-close') closeWish();
+  });
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && opened) {
+    if (e.key !== 'Escape') return;
+    if (wishOpened) { closeWish(); return; }
+    if (modePicker.classList.contains('show')) { closeModePicker(); return; }
+    if (opened) {
       if (confirmEl.classList.contains('show')) hideConfirm();
       else closeRace();
     }
