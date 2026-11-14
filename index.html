@@ -3569,6 +3569,20 @@ html[data-theme="dark"] #lg8Rate::-moz-range-thumb {
 }
 html.lg-compat .pro-gold { animation: none; }   /* 兼容模式：光效静止，省掉持续动画 */
 
+/* 左上角标题版本号：加深金色边缘并加细描边/投影，提升浅色背景上的可读性 */
+#title .pro-gold {
+  background: linear-gradient(115deg,
+    #b98f2e 0%, #d8b95e 26%, #f4e3ab 50%,
+    #d8b95e 74%, #b98f2e 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: .3px rgba(150, 105, 20, .35);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .85), 0 1px 2px rgba(120, 85, 20, .16);
+  filter: none;
+}
+
 /* --- 9. 「恭喜你」：回退金色实验，恢复原始红橙渐变；仅保留无缩放的轻上浮入场；粒子不盖结果名字 --- */
 #congrats {
   transform: translateY(14px);
@@ -4970,9 +4984,15 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
       版本号：V9.1
       更新日志：
       V9.1
-      · 原神祈愿特殊模式：角色祈愿卡池、四连抽与纯排版卡面
-      · 周佳乐固定五星，其余元素统一四星
-      · 祈愿页左下角新增设置：一键静音、音量调节与音效拓展（扩展音效默认不加载）
+      · 原神祈愿特殊模式：角色活动祈愿卡池、单抽与四连抽
+      · 周佳乐固定五星，其余元素统一四星；每 30 抽保底五星周佳乐
+      · 祈愿界面全面汉化，结果页新增「再来一次」与顶部测试提示
+      · 抽卡动画改为 Canvas 实时绘制：星空、流星、旋转法阵、爆闪与粒子
+      · 界面全面脱离贴图：云海背景、祈愿/关闭/跳过按钮、结果页背景均由代码绘制
+      · 卡池「万序衍盈」：低饱和彩色流光、装饰元素与左上角横幅名
+      · 结果页：单人卡自适应放大、名字逐字弹簧入场、多卡逐个推入
+      · 左下角设置：一键静音、音量调节与音效拓展（默认不加载，无常驻背景音）
+      · 主界面版本号金色优化；特殊模式窗口标题改为 PlusFeaturing 蓝色慢速扫光
       V8.1
       · 新增本地合规审计验真：实时计算概率参数 SHA-256 哈希，哈希变化即代表配置被修改
       · 概率验真指示灯升级：绿=正常、橙=参数异常、红=校验故障；单击展开合规校验与审计面板入口
@@ -5415,11 +5435,23 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
 
   /* ---------- 特殊模式「原神抽卡」的抽取桥 ----------
      只复用现有 randomName/权重/佳乐彩蛋，抽取概率逻辑零改动。
-     星级仅用于卡面动画与展示：周佳乐固定五星，其余元素一律四星。 */
+     星级仅用于卡面动画与展示：周佳乐固定五星，其余元素一律四星。
+     保底：每 30 抽必出五星（周佳乐），出五星后计数清零。 */
+  var WISH_PITY_KEY = 'genshin_wish_pity_v1';
+  var WISH_PITY_LIMIT = 30;
+
   window.__lgWishDraw = function (count, jiale) {
     count = Math.max(1, Math.min(4, parseInt(count, 10) || 1));
-    /* 佳乐庆典：必须命中周佳乐，四连抽就是四个周佳乐 */
+    var pity = 0;
+    try { pity = parseInt(localStorage.getItem(WISH_PITY_KEY), 10) || 0; } catch (e) { pity = 0; }
+    if (pity < 0) pity = 0;
+    function savePity() {
+      try { localStorage.setItem(WISH_PITY_KEY, String(pity)); } catch (e) { /* 忽略 */ }
+    }
+    /* 佳乐庆典：必须命中周佳乐，四连抽就是四个周佳乐；五星获得后保底计数清零 */
     if (jiale) {
+      pity = 0;
+      savePity();
       var all = [];
       for (var q = 0; q < count; q++) {
         all.push({ name: '周佳乐', rating: 5 });
@@ -5429,13 +5461,22 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     }
     var picked = [];
     for (var k = 0; k < count; k++) {
+      pity += 1;
+      if (pity >= WISH_PITY_LIMIT) {
+        /* 第 30 抽保底：必出周佳乐并重置计数 */
+        pity = 0;
+        picked.push('周佳乐');
+        continue;
+      }
       var name;
       for (var tries = 0; tries < 48; tries++) {
         name = jialeMode ? jialeItem() : randomName();
         if (picked.indexOf(name) === -1) break;
       }
+      if (name === '周佳乐') pity = 0;   // 自然出五星同样重置保底
       picked.push(name);
     }
+    savePity();
     for (var j = 0; j < picked.length; j++) addHistory(picked[j]);
     return picked.map(function (name) {
       /* 周佳乐固定五星，其余元素一律四星（不做权重分级） */
@@ -10653,7 +10694,35 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
     user-select:none; -webkit-user-select:none;
   }
   #modePicker.show #modePickerDialog{ opacity:1; transform:none; filter:none; }
-  .mode-picker-title{ font-size:17px; font-weight:600; letter-spacing:.5px; color:var(--ink-strong); }
+  /* 特殊模式选择窗标题：PlusFeaturing · 慢速蓝色扫光 */
+  .mode-picker-title{
+    font-size:21px;
+    font-weight:700;
+    letter-spacing:.16em;
+    background: linear-gradient(100deg,
+      #14386e 0%, #2f6bc8 22%, #7db4ff 44%, #e8f4ff 50%,
+      #7db4ff 56%, #2f6bc8 78%, #14386e 100%);
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .85)) drop-shadow(0 6px 16px rgba(70, 140, 255, .28));
+    animation: plusSheen 9s linear infinite;
+  }
+  @keyframes plusSheen {
+    0% { background-position: 200% 0; }
+    100% { background-position: 0% 0; }
+  }
+  html.lg-compat .mode-picker-title { animation: none; }
+  html[data-theme="dark"] .mode-picker-title{
+    background: linear-gradient(100deg,
+      #6fa8ff 0%, #9cc8ff 24%, #dceeff 50%,
+      #9cc8ff 76%, #6fa8ff 100%);
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
   .mode-picker-sub{ margin-top:5px; font-size:11.5px; letter-spacing:.6px; color:var(--ink-3); }
   .mode-cards{ display:flex; gap:14px; margin-top:16px; }
   .mode-card{
@@ -10694,7 +10763,7 @@ html[data-theme="dark"] .dev-log-item.level-warn .dev-log-msg { color: #e6b76a; 
 
 <div id="modePicker" class="scrim" aria-hidden="true">
   <div id="modePickerDialog" class="glass mat-modal">
-    <div class="mode-picker-title">特殊模式</div>
+    <div class="mode-picker-title">PlusFeaturing</div>
     <div class="mode-picker-sub">选择要进入的模式</div>
     <div class="mode-cards">
       <button id="modeCardGenshin" class="mode-card" type="button" data-mode="genshin">

@@ -13,10 +13,8 @@
   <div id="bannersView" class="wrapper banners">
     <div class="giws-banners-container">
       <div class="heading">
-        <div class="select-banner" id="selectBanner" role="tablist" aria-label="卡池选择">
-          <button class="banner-button selected" type="button" role="tab" data-banner="moment-of-bloom-2">角色祈愿</button>
-        </div>
-        <div class="close-window" id="closeWindow" role="button" tabindex="0" aria-label="退出特殊模式"></div>
+        <div class="wish-notice">测试功能，不代表最终品质</div>
+        <button class="close-window" id="closeWindow" type="button" aria-label="退出特殊模式"></button>
       </div>
 
       <div class="carousel-container">
@@ -24,10 +22,12 @@
           <div class="slider-wrapper axis-horizontal">
             <ul class="slider animated" id="slider">
               <li class="slide slide-character">
+                <div class="slide-surface" aria-hidden="true"></div>
                 <div class="wish-counter" data-count-for="moment-of-bloom-2">0</div>
+                <div class="slide-banner-name" aria-hidden="true">万序衍盈</div>
+                <div class="slide-deco" aria-hidden="true"></div>
                 <div class="slide-glyph" aria-hidden="true"></div>
                 <div class="slide-title"><span>角色活动祈愿</span></div>
-                <div class="slide-note">CHARACTER EVENT WISH</div>
               </li>
             </ul>
           </div>
@@ -36,23 +36,27 @@
 
       <div class="action-container">
         <div class="wish-container">
-          <div class="wish-button" id="wishBtn" role="button" tabindex="0">Wish</div>
-          <div class="wish-button" id="wishBtn4" role="button" tabindex="0">Wish x4</div>
+          <button class="wish-button" id="wishBtn" type="button">祈愿</button>
+          <button class="wish-button" id="wishBtn4" type="button">祈愿 ×4</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ============ 抽卡动画页 ============ -->
+  <!-- ============ 抽卡动画页（Canvas 实时绘制） ============ -->
   <div id="wishView" hidden>
-    <button class="skip-button" id="skipBtn" type="button">Skip</button>
-    <video id="wishVideo" playsinline autoplay muted></video>
+    <canvas id="wishCanvas" aria-hidden="true"></canvas>
+    <div class="wish-burst-flash" id="wishFlash" aria-hidden="true"></div>
+    <button class="skip-button" id="skipBtn" type="button">跳过</button>
   </div>
 
   <!-- ============ 结果页 ============ -->
   <div id="resultsView" class="wish-results" hidden>
     <button class="close-button" id="resultsClose" type="button" aria-label="返回卡池"></button>
     <div class="results-stage" id="resultsRow"></div>
+    <div class="results-actions">
+      <button class="again-button" id="againBtn" type="button">再来一次</button>
+    </div>
   </div>
 
   <!-- ============ 设置（左下角） ============ -->
@@ -78,7 +82,7 @@
     </div>
     <div class="settings-section">
       <div class="settings-row">
-        <div class="settings-label"><span>音效拓展</span><small>抽卡动画与结果揭示音效 · 默认不加载</small></div>
+        <div class="settings-label"><span>音效拓展</span><small>结果揭示与列表音效 · 默认不加载</small></div>
         <button class="toggle" id="extendedToggle" type="button" role="switch" aria-checked="false"><span class="toggle-knob"></span></button>
       </div>
     </div>
