@@ -417,6 +417,32 @@ body[data-phase="stopping"] .controls{
   filter:brightness(1.12) saturate(1.05);
   box-shadow:0 0 32px rgba(126,211,228,.32), 0 10px 30px rgba(42,112,150,.32), 0 0 0 1px rgba(190,242,248,.30) inset;
 }
+.ctrl.h2s{
+  width:clamp(66px, 6.8vw, 80px); height:clamp(66px, 6.8vw, 80px);
+  color:#f1e7ff;
+  background:
+    radial-gradient(circle at 35% 24%, rgba(236,220,255,.38), transparent 32%),
+    linear-gradient(155deg, rgba(134,88,204,.94), rgba(86,50,156,.95) 70%, rgba(48,26,92,.96));
+  box-shadow:0 10px 30px rgba(122,64,200,.28), 0 0 0 1px rgba(212,182,255,.16) inset, 0 1px 0 rgba(255,255,255,.26) inset;
+  transition:transform .16s var(--spring), filter .16s, box-shadow .16s, opacity .2s;
+}
+.ctrl.h2s .ctrl-icon{ font-size:13px; font-weight:800; letter-spacing:.4px; }
+.ctrl.h2s.active{
+  transform:scale(.96);
+  filter:brightness(1.16) saturate(1.12);
+  box-shadow:0 0 36px rgba(168,100,255,.44), 0 10px 30px rgba(122,64,200,.34), 0 0 0 1px rgba(228,204,255,.34) inset;
+}
+.ctrl.h2s.cooling{ opacity:.5; filter:saturate(.65); }
+.ctrl.h2s:disabled{ cursor:not-allowed; }
+body.jiale-mode .ctrl.h2s{ display:none !important; }
+.boostfx.h2s{
+  background:
+    radial-gradient(70% 60% at 50% 58%, rgba(158,84,255,.20), rgba(158,84,255,0) 70%),
+    linear-gradient(90deg, rgba(158,84,255,.26), rgba(158,84,255,0) 16%, rgba(158,84,255,0) 84%, rgba(158,84,255,.26));
+}
+body.h2s-boost .speedlines{
+  background:repeating-conic-gradient(from 0deg at 50% 55%, rgba(198,146,255,.85) 0deg .28deg, rgba(198,146,255,0) .28deg 5.4deg);
+}
 .ctrl.brake{
   width:clamp(84px, 8.8vw, 102px); height:clamp(84px, 8.8vw, 102px);
   background:
@@ -580,6 +606,7 @@ body.no-names .hud-meta{ display:none; }
   .nitro-hud{ margin-top:7px; }
   .controls{ right:calc(12px + env(safe-area-inset-right)); bottom:calc(14px + env(safe-area-inset-bottom)); gap:9px; }
   .ctrl.nitro{ width:64px; height:64px; }
+  .ctrl.h2s{ width:60px; height:60px; }
   .ctrl.brake{ width:80px; height:80px; }
   .ctrl .ctrl-icon{ font-size:13px; }
   .ctrl b{ font-size:10px; }
@@ -779,7 +806,7 @@ body[data-phase="crash"] .hud-brand .brand-dot{ background:#ff7a6a; }
     <div class="start-hint keys-hint">
       <kbd>SPACE</kbd><span>刹车</span><i></i><kbd>SHIFT</kbd><span>氮气</span><i></i><span>长按 N₂O 加速</span>
     </div>
-    <div class="start-hint touch-hint">按住右下 N₂O 加速 · 点刹车抽选</div>
+    <div class="start-hint touch-hint">按住 N₂O 加速 · 点 H₂S 超速 · 点刹车抽选</div>
     <div class="start-hint jiale-secret">三击顶部 · 佳乐庆典</div>
   </section>
 
@@ -843,11 +870,14 @@ body[data-phase="crash"] .hud-brand .brand-dot{ background:#ff7a6a; }
     <button id="nitroBtn" class="ctrl nitro" type="button" aria-label="按住使用氮气">
       <span class="ctrl-icon">ϟ</span><b>N₂O</b><small>HOLD</small>
     </button>
+    <button id="h2sBtn" class="ctrl h2s" type="button" aria-label="点击释放硫化氢超速">
+      <span class="ctrl-icon">☣</span><b>H₂S</b><small id="h2sSmall">CLICK</small>
+    </button>
     <button id="brakeBtn" class="ctrl brake" type="button" aria-label="刹车停止">
       <span class="ctrl-icon">▮▮</span><b>刹车</b><small>BRAKE</small>
     </button>
   </div>
-  <div id="driveHint" class="drive-hint">空格刹车 · 长按 SHIFT 氮气 · 碾过名字回充 N₂O</div>
+  <div id="driveHint" class="drive-hint">空格刹车 · 长按 SHIFT 氮气 · 点 H₂S 超速 · 碾过名字回充 N₂O</div>
 
   <div id="resultDock" class="result-dock" role="dialog" aria-live="polite" aria-label="抽取结果">
     <div class="result-copy">
@@ -902,6 +932,7 @@ const speedo = $('speedo'), speedValue = $('speedValue'), gearValue = $('gearVal
 const nitroFill = $('nitroFill'), nitroPct = $('nitroPct'), nitroState = $('nitroState');
 const dialNeedle = $('dialNeedle'), dialArc = $('dialArc');
 const nitroBtn = $('nitroBtn'), brakeBtn = $('brakeBtn');
+const h2sBtn = $('h2sBtn'), h2sSmall = $('h2sSmall');
 const resultDock = $('resultDock'), resultName = $('resultName');
 const fader = $('fader'), candidateCount = $('candidateCount'), fpsValue = $('fpsValue');
 const speedlines = $('speedlines'), boostfx = $('boostfx'), driveHint = $('driveHint');
@@ -1203,6 +1234,10 @@ let phase = 'idle'; // idle | running | stopping | reveal
 
 /* 赛道 / 名单 */
 let trackEnd = 0, roadEnd = 0, slotSpacing = 26, nameGroup = null;
+/* 无限赛道：世界内容在本地坐标上的起止、循环长度与两份可接力副本 */
+let worldRoot = null, worldCopy = null, worldGroundMesh = null;
+const WORLD_START = -120;
+let worldEnd = 0, worldCycle = 0, worldLap = 0;
 let nameSlots = [];
 let nameTexCache = new Map();
 const NAME_FIRST_Z = 60;
@@ -1213,7 +1248,6 @@ let trackBends = [];
 let turnEvent = null;
 let assistBend = null;
 let lastTurnAt = -1e9;
-let loopPending = false, loopTimer = null;
 let driftFxT = 0;
 let crashT = 0, crashShown = false, crashDir = 1;
 const START_V = 18;
@@ -1222,8 +1256,14 @@ const NITRO_MAX = 88;
 const ACCEL = 16;
 const NITRO_ACCEL = 33;
 const BRAKE_A = 24;
+/* H₂S 硫化氢加速：一次点击的短时超速 */
+const H2S_MAX = 168;
+const H2S_ACCEL = 130;
+const H2S_DURATION = 2.6;
+const H2S_COOLDOWN = 7;
 let carZ = 0, vel = 0, prevVel = 0, carAccel = 0;
 let nitro = 60, nitroHeld = false, nitroOn = false, nitroLock = false;
+let h2sActive = false, h2sT = 0, h2sCooldown = 0, h2sFxT = 0, h2sZT = 0;
 let stopTargetIndex = -1, stopTargetZ = 0, stopDecel = 0;
 let winnerName = '', winnerSlot = null;
 let groundRevealT = 0;
@@ -1243,6 +1283,8 @@ let bodyPitch = 0, wheelAngle = 0;
 let headlightSpots = [], sunLight = null, sunTarget = null;
 let tailGlows = [], brakeLightMat = null, brakeLightCoreMat = null;
 let nitroFlames = [], nitroGlowMat = null, nitroRearLight = null;
+let h2sFlames = [], h2sRearLight = null;
+let h2sZPool = [], h2sZTex = null;
 let startLightMats = [], startLightGlows = [];
 let smoke = null, rings = null, burst = null;
 let glowTex = null, envRT = null;
@@ -2308,6 +2350,7 @@ function resetJialeRound(){
 function enterJiale(){
   if(jialeMode) return;
   cancelTurnEvent(true);
+  endH2S();
   jialeMode = true;
   jialeMixTarget = 1;
   document.body.classList.add('jiale-mode');
@@ -3331,7 +3374,6 @@ function updateBelialRace(dt){
     vel = Math.min(BASE_MAX, vel + ACCEL * dt);
     carZ += vel * dt;
     updateCarPath(dt, true);
-    if(carZ > trackEnd + 30) loopTrack();
     belialGroup.position.x = trackX(carZ + BELIAL_DIST);
     belialGroup.position.z = carZ + BELIAL_DIST;
     belialGroup.updateMatrixWorld(true);
@@ -4132,11 +4174,12 @@ function exitBelial(){
   setBelialResultCopy(false);
   if(scene && scene.fog){ scene.fog.near = 80; scene.fog.far = 460; }
   if(driveHint){
-    driveHint.textContent = '空格刹车 · 长按 SHIFT 氮气 · 碾过名字回充 N₂O';
+    driveHint.textContent = '空格刹车 · 长按 SHIFT 氮气 · 点 H₂S 超速 · 碾过名字回充 N₂O';
     driveHint.classList.add('dim');
   }
   setPhase('idle');
   carZ = 0; vel = 0;
+  resetWorldStream();
   resetCarPose();
   cameraReady = false;
   camFov = 60;
@@ -4424,6 +4467,7 @@ function buildSkybridges(){
     g.position.set(trackX(z), 0, z);
     g.rotation.y = trackAngle(z);
     g.visible = !belialMode;
+    g.userData.belialHidden = true;
     belialHiddenScenery.push(g);
     scene.add(g);
   });
@@ -4623,6 +4667,19 @@ function initScene(){
 
   buildLights();
   computeTrackLayout();
+
+  /* 无限赛道：把可循环的赛道/城市内容收进 worldRoot，
+     构建完成后克隆一份按世界周期平铺，车永远开不到路的尽头。 */
+  worldEnd = roadEnd + 120;
+  worldCycle = worldEnd - WORLD_START;
+  worldRoot = new THREE.Group();
+  worldRoot.name = 'worldRoot';
+  scene.add(worldRoot);
+  const sceneAdd = scene.add.bind(scene);
+  scene.add = function(){
+    for(let i=0;i<arguments.length;i++) worldRoot.add(arguments[i]);
+    return scene;
+  };
   buildRoad();
   buildCity();
   buildTurnSigns();
@@ -4631,9 +4688,31 @@ function initScene(){
   buildCatEyes();
   buildDistantTower();
   buildAbstractSkyline();
-  buildSkyDecor();
   buildNeonSigns();
   buildLightGates();
+  scene.add = sceneAdd;
+
+  worldCopy = worldRoot.clone(true);
+  worldCopy.name = 'worldCopy';
+  worldCopy.position.z = worldCycle;
+  /* 庆典内需要隐藏的景物也把克隆副本纳入列表 */
+  worldCopy.traverse((o)=>{
+    if(o.userData && o.userData.belialHidden) belialHiddenScenery.push(o);
+  });
+  /* 大地面只保留一份并跟随车辆，避免两份重合 z-fighting */
+  const strayGrounds = [];
+  worldRoot.traverse((o)=>{ if(o.userData && o.userData.worldGround) strayGrounds.push(o); });
+  worldCopy.traverse((o)=>{ if(o.userData && o.userData.worldGround) strayGrounds.push(o); });
+  for(const g of strayGrounds){
+    if(!worldGroundMesh && g.parent === worldRoot) worldGroundMesh = g;
+  }
+  for(const g of strayGrounds){
+    if(g !== worldGroundMesh && g.parent) g.parent.remove(g);
+  }
+  if(worldGroundMesh) scene.add(worldGroundMesh);
+  scene.add(worldCopy);
+
+  buildSkyDecor();
   buildDust();
   buildStartGantry();
   buildCar();
@@ -4667,8 +4746,18 @@ function computeTrackLayout(){
   }
 }
 
-/* 赛道中心线横向偏移与切线角（所有路面/装饰/车辆共用） */
+/* 无限赛道：把任意 z 映射回一份世界内容的本地坐标 */
+function worldLocalZ(z){
+  if(!worldCycle) return z;
+  let u = (z - WORLD_START) % worldCycle;
+  if(u < 0) u += worldCycle;
+  return WORLD_START + u;
+}
+
+/* 赛道中心线横向偏移与切线角（所有路面/装饰/车辆共用）。
+   世界内容按 worldCycle 周期重复，弯道因此也周期重复。 */
 function trackX(z){
+  z = worldLocalZ(z);
   let x = 0;
   for(let i=0;i<trackBends.length;i++){
     const b = trackBends[i];
@@ -4754,6 +4843,7 @@ function buildRoad(){
   ground.rotation.x = -Math.PI/2;
   ground.position.set(0,-.12, roadEnd*.5);
   ground.receiveShadow = PERF.tier === 'high';
+  ground.userData.worldGround = true;
   scene.add(ground);
 
   // 沥青：低配用标准材质，跳过高光/粗糙度贴图
@@ -5587,6 +5677,31 @@ function buildCar(){
     carBody.add(nitroRearLight);
   }
 
+  // H₂S 紫色尾气火焰
+  h2sFlames = [];
+  for(const s of [-1,1]){
+    const outer = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({
+      color:0x9b5cff, transparent:true, opacity:0, blending:THREE.AdditiveBlending,
+      depthWrite:false, side:THREE.DoubleSide, toneMapped:false
+    }));
+    outer.position.set(s*.44,.33,-2.42);
+    outer.scale.set(.85,1.15,.65);
+    carBody.add(outer);
+    const inner = new THREE.Mesh(flameGeo, new THREE.MeshBasicMaterial({
+      color:0xf0dcff, transparent:true, opacity:0, blending:THREE.AdditiveBlending,
+      depthWrite:false, side:THREE.DoubleSide, toneMapped:false
+    }));
+    inner.position.copy(outer.position);
+    inner.scale.set(.4,.6,.38);
+    carBody.add(inner);
+    h2sFlames.push({outer, inner});
+  }
+  if(!lowCar){
+    h2sRearLight = new THREE.PointLight(0x9b4dff, 0, 9, 2);
+    h2sRearLight.position.set(0,.42,-2.75);
+    carBody.add(h2sRearLight);
+  }
+
   // 侧标
   const sideDecal = texFromCanvas(makeCanvas(256,96,(c,w,h)=>{
     c.clearRect(0,0,w,h);
@@ -5757,7 +5872,7 @@ function buildNameSlots(){
     mesh.rotation.y = ang;
     mesh.renderOrder = 2;
     nameGroup.add(mesh);
-    nameSlots.push({z, x:cx, ang, mesh, mat, lit:false, name:''});
+    nameSlots.push({baseZ:z, z, x:cx, ang, mesh, mat, lit:false, name:''});
   }
 }
 function shuffleArray(arr){
@@ -5774,6 +5889,7 @@ function layoutNamesForRound(){
     const nm = order[i % order.length];
     slot.name = nm;
     slot.lit = false;
+    slot.z = slot.baseZ;
     const cx = trackX(slot.z), ang = trackAngle(slot.z);
     slot.x = cx; slot.ang = ang;
     slot.mesh.position.set(cx, .028, slot.z);
@@ -5785,6 +5901,26 @@ function layoutNamesForRound(){
     slot.mat.needsUpdate = true;
   });
   groundRevealT = 0;
+}
+
+/* 无限赛道：名字槽位跑到车后即挪到前方，保持前方始终有可抽的名字 */
+function recycleNameSlots(){
+  if(phase !== 'running' || !nameSlots.length) return;
+  const span = nameSlots.length * slotSpacing;
+  for(const slot of nameSlots){
+    if(slot.z >= carZ - 60) continue;
+    let z = slot.z;
+    while(z < carZ + 60) z += span;
+    slot.z = z;
+    slot.x = trackX(z);
+    slot.ang = trackAngle(z);
+    slot.mesh.position.set(slot.x, .028, z);
+    slot.mesh.rotation.y = slot.ang;
+    slot.mesh.scale.setScalar(1);
+    slot.lit = false;
+    slot.mat.color.setHex(0xdcebf4);
+    slot.mat.opacity = .35;
+  }
 }
 function resetNameVisuals(){
   nameSlots.forEach(slot=>{
@@ -5878,6 +6014,96 @@ function makeBurstSystem(max){
 function buildEffects(){
   burst = makeBurstSystem(PERF.tier === 'low' ? 120 : PERF.tier === 'medium' ? 220 : (IS_MOBILE ? 320 : 640));
   rings = new RingPool(PERF.tier === 'low' ? 2 : IS_MOBILE ? 4 : 8);
+}
+
+/* ============================================================
+   H₂S（硫化氢）加速：紫色尾气 + Z 字母
+   ============================================================ */
+function ensureH2SZPool(){
+  if(h2sZPool.length || !carBody) return;
+  h2sZTex = texFromCanvas(makeCanvas(128,128,(c,w,h)=>{
+    c.clearRect(0,0,w,h);
+    c.textAlign='center'; c.textBaseline='middle';
+    c.font='900 94px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+    c.shadowColor='rgba(154,84,255,.95)';
+    c.shadowBlur=22;
+    c.fillStyle='rgba(238,222,255,.96)';
+    c.fillText('Z', w/2, h/2+4);
+    c.shadowBlur=0;
+    c.strokeStyle='rgba(190,140,255,.85)';
+    c.lineWidth=2;
+    c.strokeText('Z', w/2, h/2+4);
+  }), true);
+  for(let i=0;i<12;i++){
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:h2sZTex, transparent:true, opacity:0, depthWrite:false,
+      blending:THREE.AdditiveBlending, toneMapped:false
+    }));
+    sprite.visible = false;
+    sprite.renderOrder = 9;
+    carBody.add(sprite);
+    h2sZPool.push({sprite, life:0, maxLife:1, vx:0, vy:0, vz:0, baseScale:.4});
+  }
+}
+function spawnH2SZ(){
+  ensureH2SZPool();
+  const item = h2sZPool.find(p=>p.life<=0);
+  if(!item) return;
+  const side = Math.random()<.5 ? -1 : 1;
+  item.life = item.maxLife = .85 + Math.random()*.75;
+  item.sprite.visible = true;
+  item.sprite.position.set(side*(.35+Math.random()*.55), .55+Math.random()*.65, -2.35-Math.random()*.7);
+  item.vx = side*(.14+Math.random()*.28);
+  item.vy = .7+Math.random()*.6;
+  item.vz = -.9-Math.random()*1.3;
+  item.baseScale = .46+Math.random()*.32;
+  item.sprite.scale.setScalar(item.baseScale);
+  item.sprite.material.opacity = 0;
+}
+function updateH2SZPool(dt){
+  for(const p of h2sZPool){
+    if(p.life <= 0) continue;
+    p.life -= dt;
+    if(p.life <= 0){ p.sprite.visible = false; continue; }
+    p.sprite.position.x += p.vx*dt;
+    p.sprite.position.y += p.vy*dt;
+    p.sprite.position.z += p.vz*dt;
+    const f = p.life/p.maxLife;
+    p.sprite.material.opacity = Math.min(1, (1-f)*4) * f * 1.1;
+    p.sprite.scale.setScalar(p.baseScale*(1+(1-f)*1.1));
+  }
+}
+function activateH2S(){
+  if(phase !== 'running' || jialeMode || belialMode || h2sCooldown > 0 || h2sActive) return;
+  h2sActive = true;
+  h2sT = H2S_DURATION;
+  h2sCooldown = H2S_COOLDOWN;
+  h2sFxT = 0;
+  h2sZT = 0;
+  if(h2sBtn) h2sBtn.classList.add('active');
+  ensureH2SZPool();
+  Sfx.h2s();
+  if(burst) burst.spawn(carX + (Math.random()-.5)*.5, .42, carZ - 2.4, IS_MOBILE?16:28,
+    [[.62,.3,1],[.45,.18,.95],[.95,.85,1]], 8);
+  if(rings) rings.spawn(carX, .022, carZ - 1.2, .35, 3.2, .5, 0xa855ff);
+}
+function endH2S(){
+  if(!h2sActive) return;
+  h2sActive = false;
+  h2sT = 0;
+  if(h2sBtn) h2sBtn.classList.remove('active');
+}
+function resetH2S(){
+  endH2S();
+  h2sT = 0;
+  h2sCooldown = 0;
+  h2sFxT = 0;
+  h2sZT = 0;
+  if(h2sBtn){
+    h2sBtn.classList.remove('active', 'cooling');
+    h2sBtn.disabled = false;
+  }
+  for(const p of h2sZPool){ p.life = 0; p.sprite.visible = false; }
 }
 function RingPool(count){
   const pool = [];
@@ -5982,9 +6208,6 @@ function beginRound(){
   turnEvent = null;
   hideTurnEvent();
   lastTurnAt = -1e9;
-  loopPending = false;
-  clearTimeout(loopTimer);
-  loopTimer = null;
   driftFxT = 0;
   trackBends.forEach(b=>{ b.shown = false; });
   crashT = 0; crashShown = false; crashDir = 1;
@@ -5994,6 +6217,8 @@ function beginRound(){
   carZ = 0; vel = START_V; prevVel = START_V; nitro = 60;
   nitroHeld = false; nitroOn = false; nitroLock = false;
   nitroSfxPrev = false;
+  resetH2S();
+  resetWorldStream();
   stopTargetIndex = -1; stopTargetZ = 0; stopDecel = 0;
   winnerName = ''; winnerSlot = null;
   phaseT = 0; idleT = 0;
@@ -6030,10 +6255,21 @@ function requestBrake(){
   Sfx.brake();
   const v = Math.max(vel, .1);
   const natural = (v*v)/(2*BRAKE_A);
-  let idx = nameSlots.findIndex(s=>s.z >= carZ + Math.max(natural, 14));
-  if(idx < 0) idx = nameSlots.length-1;
-  while(idx < nameSlots.length-1 && nameSlots[idx].z <= carZ + 1.5) idx++;
-  beginStop(idx);
+  /* 名字槽位会循环前移，数组不再按 z 排序：直接找车前方最近的名字 */
+  const minD = Math.max(natural, 14);
+  let best = -1, bestD = Infinity;
+  for(let i=0;i<nameSlots.length;i++){
+    const d = nameSlots[i].z - carZ;
+    if(d >= minD && d < bestD){ best = i; bestD = d; }
+  }
+  if(best < 0){
+    for(let i=0;i<nameSlots.length;i++){
+      const d = nameSlots[i].z - carZ;
+      if(d > 1.5 && d < bestD){ best = i; bestD = d; }
+    }
+  }
+  if(best < 0) return;
+  beginStop(best);
 }
 function beginStop(index, auto){
   if(phase !== 'running') return;
@@ -6046,6 +6282,7 @@ function beginStop(index, auto){
   stopDecel = d > 0 ? Math.max(.15, (vel*vel)/(2*d)) : 50;
   vel = Math.max(vel, .1);
   nitroHeld = false; nitroOn = false; nitroLock = false;
+  endH2S();
   setPhase('stopping');
   brakeBtn.classList.add('active');
   setTimeout(()=>brakeBtn.classList.remove('active'), 280);
@@ -6215,6 +6452,7 @@ function startCrash(bend){
   turnAssist = false;
   assistBend = null;
   nitroHeld = false; nitroOn = false; nitroLock = false;
+  endH2S();
   vel = Math.max(vel, 22);
   Sfx.end();
   Sfx.crash();
@@ -6252,10 +6490,11 @@ function updateTurnEvent(dt){
     if(turnEvent){ turnEvent = null; hideTurnEvent(); }
     return;
   }
+  const lz = worldLocalZ(carZ);
   if(!turnEvent){
     for(const b of trackBends){
       if(b.shown) continue;
-      if(carZ >= b.start - 85 && carZ <= b.start + 15){
+      if(lz >= b.start - 85 && lz <= b.start + 15){
         if(phaseT - lastTurnAt < 8){
           b.shown = true;
           turnAssist = true;
@@ -6283,42 +6522,50 @@ function updateTurnEvent(dt){
   }
   if(turnAssist){
     if(assistBend){
-      if(carZ > assistBend.end + 25){
+      if(lz > assistBend.end + 25){
         turnAssist = false;
         assistBend = null;
       }
     }else{
-      const inBend = trackBends.some(b => carZ >= b.start - 3 && carZ <= b.end + 3);
+      const inBend = trackBends.some(b => lz >= b.start - 3 && lz <= b.end + 3);
       if(!inBend && Math.abs(carX) < .12) turnAssist = false;
     }
   }
 }
 
-function loopTrack(){
-  if(loopPending || phase !== 'running') return;
-  loopPending = true;
-  cancelTurnEvent();
-  turnAssist = false;
-  assistBend = null;
-  fader.classList.add('show');
-  cameraReady = false;
-  clearTimeout(loopTimer);
-  loopTimer = setTimeout(()=>{
-    loopPending = false;
-    if(phase !== 'running'){
-      fader.classList.remove('show');
-      return;
+/* 无限赛道：两份世界内容按周期接力，车后方到期的副本移到最前方 */
+function updateWorldStream(){
+  if(!worldRoot || !worldCopy || !worldCycle) return;
+  if(worldGroundMesh) worldGroundMesh.position.z = carZ;
+  const copies = [worldRoot, worldCopy];
+  for(const c of copies){
+    if(carZ > c.position.z + worldEnd + 90){
+      const other = c === worldRoot ? worldCopy : worldRoot;
+      c.position.z = other.position.z + worldCycle;
     }
-    carZ = -40; carX = 0; carHeading = 0; carLean = 0;
-    if(carGroup){
-      carGroup.position.set(0, 0, carZ);
-      carGroup.rotation.set(0, 0, 0);
-    }
-    resetNameVisuals();
-    layoutNamesForRound();
-    trackBends.forEach(b=>{ b.shown = false; });
-    fader.classList.remove('show');
-  }, 240);
+  }
+  for(const c of copies){
+    c.visible = (c.position.z + WORLD_START - carZ) < 540;
+  }
+}
+
+/* 新一轮 / 退出庆典时把世界与名字槽位复位 */
+function resetWorldStream(){
+  if(worldRoot) worldRoot.position.z = 0;
+  if(worldCopy) worldCopy.position.z = worldCycle;
+  worldLap = 0;
+  if(worldRoot) worldRoot.visible = true;
+  if(worldCopy) worldCopy.visible = true;
+  trackBends.forEach(b=>{ b.shown = false; });
+  for(const slot of nameSlots){
+    slot.z = slot.baseZ;
+    slot.x = trackX(slot.z);
+    slot.ang = trackAngle(slot.z);
+    slot.mesh.position.set(slot.x, .028, slot.z);
+    slot.mesh.rotation.y = slot.ang;
+    slot.mesh.scale.setScalar(1);
+    slot.lit = false;
+  }
 }
 
 function updateCarPath(dt, follow){
@@ -6331,14 +6578,23 @@ function updateCarPath(dt, follow){
 
 function updateRace(dt){
   phaseT += dt;
+  if(h2sCooldown > 0) h2sCooldown = Math.max(0, h2sCooldown - dt);
+  if(h2sActive && (phase !== 'running' || jialeMode || belialMode)){
+    endH2S();
+  }else if(h2sActive){
+    h2sT -= dt;
+    if(h2sT <= 0) endH2S();
+  }
   if(belialMode){ updateBelialRace(dt); return; }
   if(phase === 'running'){
     nitroOn = !!(nitroHeld && !nitroLock && nitro > .35);
     if(nitroOn && !nitroSfxPrev) Sfx.nitro();
     nitroSfxPrev = nitroOn;
-    const maxV = nitroOn ? NITRO_MAX : BASE_MAX;
-    if(vel < maxV) vel = Math.min(maxV, vel + (nitroOn ? NITRO_ACCEL : ACCEL)*dt);
-    else if(vel > maxV) vel = Math.max(maxV, vel - 13*dt);
+    let maxV = BASE_MAX, accel = ACCEL;
+    if(nitroOn){ maxV = NITRO_MAX; accel = NITRO_ACCEL; }
+    if(h2sActive){ maxV = H2S_MAX; accel = H2S_ACCEL; }
+    if(vel < maxV) vel = Math.min(maxV, vel + accel*dt);
+    else if(vel > maxV) vel = Math.max(maxV, vel - ((h2sCooldown > 0 && vel > BASE_MAX + 4) ? 58 : 13)*dt);
     carZ += vel*dt;
     updateCarPath(dt, jialeMode || turnAssist);
 
@@ -6349,12 +6605,25 @@ function updateRace(dt){
       nitro = Math.min(100, nitro + 2.1*dt);
     }
 
-    // 只有刹车（速度归零）才结束抽取；路程尽头无缝循环
-    if(carZ > trackEnd + 30) loopTrack();
+    /* H₂S：紫色尾气粒子与 Z 字母持续喷出 */
+    if(h2sActive){
+      h2sFxT -= dt;
+      if(h2sFxT <= 0){
+        h2sFxT = .055;
+        if(burst) burst.spawn(carX + (Math.random()-.5)*.8, .3, carZ - 2.4,
+          IS_MOBILE ? 4 : 6, [[.62,.3,1],[.45,.18,.95],[.95,.85,1]], 5);
+      }
+      h2sZT -= dt;
+      if(h2sZT <= 0){ h2sZT = .11; spawnH2SZ(); }
+    }
+
+    // 只有刹车（速度归零）才结束抽取；名字槽位向前循环，赛道永无尽头
+    recycleNameSlots();
     updateTurnEvent(dt);
 
     if(turnAssist && !jialeMode && phase === 'running'){
-      const inBend = trackBends.some(b => carZ >= b.start - 10 && carZ <= b.end + 10);
+      const lz = worldLocalZ(carZ);
+      const inBend = trackBends.some(b => lz >= b.start - 10 && lz <= b.end + 10);
       if(inBend){
         driftFxT -= dt;
         if(driftFxT <= 0){
@@ -6445,8 +6714,9 @@ function updateCar(dt){
   }
   if(underGlowMesh){
     const ug = underGlowMesh.material;
-    ug.opacity = damp(ug.opacity, .085 + Math.min(.07, vel*.0012) + (nitroOn ? .05 : 0), 5, dt);
-    ug.color.setHex(jialeMode ? 0xffb36b : 0x35d8ff);
+    const h2sGlow = h2sActive && phase === 'running';
+    ug.opacity = damp(ug.opacity, .085 + Math.min(.07, vel*.0012) + (nitroOn ? .05 : 0) + (h2sGlow ? .09 : 0), 5, dt);
+    ug.color.setHex(h2sGlow ? 0xa855ff : (jialeMode ? 0xffb36b : 0x35d8ff));
   }
 
   // 氮气火焰
@@ -6459,6 +6729,18 @@ function updateCar(dt){
     f.inner.scale.set(.35,.55,boost ? 1.3+s*.5 : .38);
   }
   if(nitroRearLight) nitroRearLight.intensity = damp(nitroRearLight.intensity, boost ? 9 : 0, 9, dt);
+
+  // H₂S 紫色尾气
+  const h2sBoost = h2sActive && phase === 'running';
+  for(const f of h2sFlames){
+    f.outer.material.opacity = damp(f.outer.material.opacity, h2sBoost ? .68 : 0, 12, dt);
+    f.inner.material.opacity = damp(f.inner.material.opacity, h2sBoost ? 1 : 0, 12, dt);
+    const s = .9 + .4*Math.sin(idleT*46);
+    f.outer.scale.set(.9, 1.15, h2sBoost ? 2.4+s : .65);
+    f.inner.scale.set(.4,.6,h2sBoost ? 1.7+s*.5 : .38);
+  }
+  if(h2sRearLight) h2sRearLight.intensity = damp(h2sRearLight.intensity, h2sBoost ? 12 : 0, 9, dt);
+  updateH2SZPool(dt);
 
   // 起跑灯随阶段
   if(phase === 'idle'){
@@ -6675,18 +6957,29 @@ function updateHUD(){
     speedlines.style.opacity = speedOpacity.toFixed(3);
     speedlines.style.transform = 'scale(' + (1.18 + sr*.10).toFixed(3) + ')';
   }
-  const boostOpacity = nitroOn ? .85 : 0;
+  const boostOn = !!nitroOn || h2sActive;
+  const boostOpacity = boostOn ? (h2sActive ? .95 : .85) : 0;
   if(Math.abs(boostOpacity-lastBoostOpacity) > .02){
     lastBoostOpacity = boostOpacity;
     boostfx.style.opacity = boostOpacity.toFixed(3);
   }
-  speedo.classList.toggle('boost', !!nitroOn);
+  boostfx.classList.toggle('h2s', h2sActive);
+  document.body.classList.toggle('h2s-boost', h2sActive);
+  speedo.classList.toggle('boost', boostOn);
   nitroBtn.classList.toggle('active', !!nitroOn);
-  if(nitroLock || nitro <= .5) nitroState.textContent = 'N₂O EMPTY';
+  if(h2sActive) nitroState.textContent = 'H₂S BOOST';
+  else if(nitroLock || nitro <= .5) nitroState.textContent = 'N₂O EMPTY';
   else if(nitroOn) nitroState.textContent = 'N₂O BOOST';
   else nitroState.textContent = 'N₂O READY';
-  nitroState.classList.toggle('boost', !!nitroOn);
-  nitroState.classList.toggle('empty', nitroLock || nitro <= .5);
+  nitroState.classList.toggle('boost', boostOn);
+  nitroState.classList.toggle('empty', !h2sActive && (nitroLock || nitro <= .5));
+  if(h2sBtn){
+    const cooling = h2sCooldown > 0 && !h2sActive;
+    h2sBtn.classList.toggle('active', !!h2sActive);
+    h2sBtn.classList.toggle('cooling', cooling);
+    h2sBtn.disabled = cooling || jialeMode || belialMode;
+    if(h2sSmall) h2sSmall.textContent = h2sActive ? 'BOOST' : (cooling ? Math.ceil(h2sCooldown) + 'S' : 'CLICK');
+  }
   if(phase === 'reveal' || (phase === 'crash' && crashShown)){
     speedValue.textContent = '0';
     lastDisplay = 0;
@@ -6878,6 +7171,13 @@ const Sfx = (() => {
       tone(1240, .16, .016, 'sine', 2600);
       tone(150, .26, .026, 'sawtooth', 380);
     },
+    h2s(){
+      ensure();
+      whoosh(.62, .078, 320, 2400, .7);    // 低沉喷涌
+      hiss(.7, .052, 1800, 6200);
+      tone(70, .52, .042, 'sawtooth', 150);
+      tone(220, .3, .022, 'square', 84, .04);
+    },
     brake(){ whoosh(.55, .06, 1900, 420); tone(88, .24, .045, 'triangle', 52); },
     reveal(){
       tone(523.25, .55, .038, 'sine');
@@ -7005,6 +7305,12 @@ function tick(now){
   dt = Math.min(dt, .05);
   idleT += dt;
   updateRace(dt);
+  updateWorldStream();
+  const lapNow = worldCycle ? Math.floor((carZ - WORLD_START) / worldCycle) : 0;
+  if(lapNow !== worldLap){
+    worldLap = lapNow;
+    trackBends.forEach(b=>{ b.shown = false; });
+  }
   updateCar(dt);
   updateCamera(dt);
   updateNames(dt);
@@ -7012,7 +7318,7 @@ function tick(now){
   updateSceneExtras(dt);
   updateJiale(dt);
   updateHUD();
-  Sfx.update(clamp(vel/BASE_MAX, 0, 1.7), nitroOn ? 1 : 0);
+  Sfx.update(clamp(vel/BASE_MAX, 0, 1.7), (nitroOn || h2sActive) ? 1 : 0);
   if(renderer && scene && camera) renderer.render(scene, camera);
 
   /* 帧率：500ms 窗口，右上角显示；低帧轻微变色提示 */
@@ -7099,6 +7405,10 @@ nitroBtn.addEventListener('pointercancel', releaseNitro);
 nitroBtn.addEventListener('pointerleave', (e)=>{ if(e.pointerType === 'mouse' && e.buttons === 0) releaseNitro(); });
 addEventListener('pointerup', ()=>{ if(nitroHeld) releaseNitro(); });
 addEventListener('blur', releaseNitro);
+
+if(h2sBtn){
+  h2sBtn.addEventListener('click', (e)=>{ e.preventDefault(); activateH2S(); });
+}
 
 addEventListener('keydown', (e)=>{
   /* 焦点在音量滑杆上时，方向键留给系统调音量 */
@@ -7275,6 +7585,17 @@ window.__raceDebug = {
     vel: +vel.toFixed(2), nitro: +nitro.toFixed(1),
     winner: winnerName, names: names.length, target: stopTargetIndex,
     lit: nameSlots.filter(s=>s.lit).length,
+    world: {
+      start: WORLD_START, end: +worldEnd.toFixed(1), cycle: +worldCycle.toFixed(1),
+      rootZ: worldRoot ? +worldRoot.position.z.toFixed(1) : 0,
+      copyZ: worldCopy ? +worldCopy.position.z.toFixed(1) : 0,
+      rootVisible: !!(worldRoot && worldRoot.visible),
+      copyVisible: !!(worldCopy && worldCopy.visible),
+      lap: worldLap,
+      namesAhead: nameSlots.filter(s=>s.z > carZ).length,
+      minAhead: nameSlots.length ? +Math.min.apply(null, nameSlots.map(s=>+(s.z-carZ).toFixed(1))).toFixed(1) : 0,
+      camZ: +carZ.toFixed(1)
+    },
     reveal: !!revealGroup, result: resultDock.classList.contains('show'),
     calls: renderer ? renderer.info.render.calls : 0,
     three: THREE ? THREE.REVISION : null,
